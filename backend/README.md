@@ -16,4 +16,4 @@ pip install -e backend
 python backend/main.py  # runs uvicorn app.main:app
 ```
 
-The FastAPI app is defined in `backend/app/main.py` and currently exposes draft routers for auth, banks, questions, and study flows. Endpoints return mock data until database and AI services are wired up.
+The FastAPI app now lives under `backend/src/app/main.py` (src-layout) and currently exposes draft routers for auth, banks, questions, and study flows. Endpoints return mock data until database and AI services are wired up.
