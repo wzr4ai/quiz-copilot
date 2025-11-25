@@ -5,9 +5,9 @@
 | 路径 | 页面名称 | 功能描述 |
 | :--- | :--- | :--- |
 | `pages/index/index` | 首页 | 展示题库列表、快捷入口（拍照录题）。 |
-| `pages/quiz/index` | 答题页 | **核心页**。类似抖音上下滑或左右滑切换题目。 |
+| `pages/quiz/index` | 答题页 | **核心页**。支持随机/错题模式、答案提交、在线修正题目。 |
 | `pages/quiz/result` | 结果页 | 展示本次练习得分、错题解析。 |
-| `pages/editor/add` | 录题中心 | 选择“文本导入”或“拍照导入”。 |
+| `pages/editor/add` | 录题中心 | 选择“文本导入”或“拍照导入”，识别后可预览并编辑题目。 |
 | `pages/profile/index`| 个人中心 | 历史记录、设置。 |
 
 ## 2. 关键组件 (Components)
@@ -27,6 +27,12 @@
 * `useQuizStore`: 管理当前正在做的题目队列、用户当前的答案、倒计时。
 * `useUserStore`: 管理 JWT Token、用户信息。
 
-## 4. UI 框架建议
+## 4. 当前 H5 MVP 交互
+- 首页请求 `/api/v1/banks` 填充题库卡片，并提供“错题重练”快捷入口（传参 `mode=wrong`）。
+- 录题页：文本/图片提交到 `/api/v1/questions/ai/*`，展示返回题目列表，允许编辑后批量调用 `/api/v1/questions/manual` 保存。
+- 答题页：通过 `/api/v1/study/session/start` 拉取题目，提交答案到 `/api/v1/study/submit`，编辑按钮调用 `/api/v1/questions/{id}` 进行题干修正。
+- 结果页：展示得分与错题列表，支持“一键重练”和“错题重练”。
+
+## 5. UI 框架建议
 * 推荐使用 **uView-plus** 或 **Wot-design-uni**。
 * 重点关注组件：`Upload` (图片上传), `Steps` (录题步骤), `Progress` (答题进度)。

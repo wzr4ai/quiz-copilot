@@ -51,3 +51,10 @@ unpackage/
 *.orig
 .DS_Store
 Thumbs.db
+
+# Local docker dev files
+backend/utils/docker/.env
+backend/utils/docker/*.local.yml
+backend/utils/docker/data/
+backend/utils/docker/tmp/
+backend/utils/docker/logs/
