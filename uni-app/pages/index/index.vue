@@ -27,6 +27,10 @@
 					<text class="action-label">错题重练</text>
 					<text class="action-desc">针对弱项</text>
 				</view>
+				<view class="action alt" @click="toManager">
+					<text class="action-label">题库管理</text>
+					<text class="action-desc">增删改查</text>
+				</view>
 			</view>
 		</view>
 
@@ -74,6 +78,10 @@ const toQuiz = (bankId, mode = 'random') => {
 
 const toEditor = (mode) => {
   uni.navigateTo({ url: `/pages/editor/add?mode=${mode}` })
+}
+
+const toManager = () => {
+  uni.navigateTo({ url: '/pages/manager/index' })
 }
 </script>
 
@@ -156,6 +164,11 @@ const toEditor = (mode) => {
 .action-desc {
 	font-size: 24rpx;
 	color: #e0f2fe;
+}
+
+.action.alt {
+	background: #10b981;
+	box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.2);
 }
 
 .bank-list {

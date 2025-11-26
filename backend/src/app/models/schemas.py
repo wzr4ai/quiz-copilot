@@ -22,6 +22,12 @@ class BankCreate(BaseModel):
     is_public: bool = False
 
 
+class BankUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    is_public: Optional[bool] = None
+
+
 class QuestionBase(BaseModel):
     bank_id: int
     type: str = Field(..., description="choice_single | choice_multi | short_answer")

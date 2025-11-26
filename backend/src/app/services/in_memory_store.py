@@ -7,6 +7,7 @@ from typing import Dict, List
 from app.models.schemas import (
     Bank,
     BankCreate,
+    BankUpdate,
     Question,
     QuestionCreate,
     QuestionUpdate,
@@ -62,6 +63,15 @@ class InMemoryStore:
         self.questions = {qid: q for qid, q in self.questions.items() if q.bank_id != bank_id}
         self.wrong_records = [record for record in self.wrong_records if record.question.bank_id != bank_id]
 
+    def update_bank(self, bank_id: int, payload: BankUpdate) -> Bank:
+        bank = self.banks.get(bank_id)
+        if bank is None:
+            raise KeyError("bank not found")
+        update_data = payload.model_dump(exclude_none=True)
+        updated = Bank(id=bank.id, **{**bank.model_dump(), **update_data})
+        self.banks[bank_id] = updated
+        return updated
+
     def list_banks(self) -> List[Bank]:
         return list(self.banks.values())
 
@@ -97,6 +107,11 @@ class InMemoryStore:
         if bank_id is None:
             return list(self.questions.values())
         return [q for q in self.questions.values() if q.bank_id == bank_id]
+
+    def delete_question(self, question_id: int) -> None:
+        if question_id in self.questions:
+            del self.questions[question_id]
+        self.wrong_records = [record for record in self.wrong_records if record.question.id != question_id]
 
     def get_question(self, question_id: int) -> Question | None:
         return self.questions.get(question_id)

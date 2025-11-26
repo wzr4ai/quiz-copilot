@@ -43,6 +43,10 @@
 			</view>
 
 			<view v-for="(question, idx) in recognizedQuestions" :key="idx" class="question-editor">
+				<view class="question-header">
+					<text class="sub">题目 {{ idx + 1 }}</text>
+					<button class="ghost mini danger" @click="removeQuestion(idx)">删除</button>
+				</view>
 				<view class="row">
 					<text class="label">题型</text>
 					<view class="chips">
@@ -50,7 +54,7 @@
 							v-for="type in questionTypes"
 							:key="type.value"
 							:class="['chip', question.type === type.value ? 'chip-active' : '']"
-							@click="question.type = type.value"
+							@click="setQuestionType(question, type.value)"
 						>
 							{{ type.label }}
 						</view>
@@ -106,6 +110,7 @@ const saving = ref(false)
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
+  { label: '多选', value: 'choice_multi' },
   { label: '简答', value: 'short_answer' },
 ]
 
@@ -174,26 +179,58 @@ const chooseImage = () => {
 
 const toBase64 = (fileObj, path) =>
   new Promise((resolve, reject) => {
-    if (fileObj && fileObj.file) {
+    const safeReject = (err) => reject(err || new Error('无法读取图片'))
+
+    // 1) FileReader branch (H5)
+    if (fileObj && (fileObj.file || fileObj instanceof Blob)) {
       const reader = new FileReader()
       reader.onload = (e) => {
         const result = (e && e.target && e.target.result) || ''
         resolve(String(result).split(',').pop())
       }
-      reader.onerror = reject
-      reader.readAsDataURL(fileObj.file)
+      reader.onerror = () => safeReject(new Error('读取图片失败'))
+      reader.readAsDataURL(fileObj.file || fileObj)
       return
     }
+
+    // 2) Data URL path already provided
+    if (typeof path === 'string' && path.startsWith('data:')) {
+      return resolve(path.split(',').pop())
+    }
+
+    // 3) Native FS branch (App/小程序)
     if (uni.getFileSystemManager) {
       uni.getFileSystemManager().readFile({
         filePath: path,
         encoding: 'base64',
         success: (res) => resolve(res.data),
-        fail: reject,
+        fail: (err) => safeReject(err),
       })
       return
     }
-    reject(new Error('无法读取图片'))
+
+    // 4) Fallback: fetch as arraybuffer then convert
+    if (typeof path === 'string') {
+      uni.request({
+        url: path,
+        method: 'GET',
+        responseType: 'arraybuffer',
+        success: (res) => {
+          try {
+            const bytes = new Uint8Array(res.data)
+            let binary = ''
+            bytes.forEach((b) => (binary += String.fromCharCode(b)))
+            resolve(btoa(binary))
+          } catch (err) {
+            safeReject(err)
+          }
+        },
+        fail: (err) => safeReject(err),
+      })
+      return
+    }
+
+    safeReject()
   })
 
 const submitImage = async () => {
@@ -222,6 +259,25 @@ const addOption = (question) => {
     question.options = []
   }
   question.options.push({ key: nextKey, text: '' })
+}
+
+const setQuestionType = (question, type) => {
+  question.type = type
+  if (type === 'short_answer') {
+    question.options = []
+    return
+  }
+  if (!question.options || !question.options.length) {
+    question.options = [
+      { key: 'A', text: '' },
+      { key: 'B', text: '' },
+    ]
+  }
+}
+
+const removeQuestion = (index) => {
+  if (index < 0 || index >= recognizedQuestions.value.length) return
+  recognizedQuestions.value.splice(index, 1)
 }
 
 const saveQuestions = async () => {
@@ -402,6 +458,17 @@ const saveQuestions = async () => {
 	gap: 12rpx;
 }
 
+.question-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+}
+
+.sub {
+	color: #475569;
+	font-size: 24rpx;
+}
+
 .row {
 	display: flex;
 	flex-direction: column;
@@ -486,5 +553,11 @@ const saveQuestions = async () => {
 .ghost.mini {
 	align-self: flex-start;
 	padding: 10rpx 16rpx;
+}
+
+.ghost.mini.danger {
+	color: #dc2626;
+	border-color: #fecdd3;
+	background: #fff1f2;
 }
 </style>

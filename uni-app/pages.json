@@ -25,6 +25,12 @@
       }
     },
     {
+      "path": "pages/manager/index",
+      "style": {
+        "navigationBarTitleText": "题库管理"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "我的"
