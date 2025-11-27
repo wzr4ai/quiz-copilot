@@ -56,6 +56,14 @@
 				</view>
 			</view>
 		</view>
+
+		<view class="card git-card" @click="openGit">
+			<view class="git-icon">🐱‍💻</view>
+			<view>
+				<text class="card-title">GitHub</text>
+				<text class="git-link">查看代码仓库</text>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -102,6 +110,10 @@ const toManager = () => {
 
 const toProfile = () => {
   uni.navigateTo({ url: '/pages/profile/index' })
+}
+
+const openGit = () => {
+  uni.navigateTo({ url: 'https://github.com/wzr4ai/quiz-copilots' })
 }
 </script>
 
@@ -194,6 +206,17 @@ const toProfile = () => {
 .action.neutral {
 	background: #6366f1;
 	box-shadow: 0 8rpx 24rpx rgba(99, 102, 241, 0.2);
+}
+
+.git-card {
+	display: flex;
+	align-items: center;
+	gap: 12rpx;
+	cursor: pointer;
+}
+
+.git-icon {
+	font-size: 36rpx;
 }
 
 .bank-list {
