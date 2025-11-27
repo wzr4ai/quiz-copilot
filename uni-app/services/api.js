@@ -1,4 +1,4 @@
-const API_BASE = 'http://10.10.10.22:8000/api/v1'
+const API_BASE = 'https://fnos.dfwzr.com:8233/api/v1'
 
 export const getToken = () => uni.getStorageSync('token')
 export const getRole = () => uni.getStorageSync('role')
@@ -78,7 +78,12 @@ export const fetchQuestions = (bankId) =>
   request(`/questions${bankId ? `?bank_id=${bankId}` : ''}`)
 export const batchImportQuestions = (payload) =>
   request('/questions/ai/batch-import', { method: 'POST', data: payload })
+export const fetchFavoriteQuestions = () => request('/questions/favorites')
+export const favoriteQuestion = (questionId) =>
+  request(`/questions/${questionId}/favorite`, { method: 'POST' })
+export const unfavoriteQuestion = (questionId) =>
+  request(`/questions/${questionId}/favorite`, { method: 'DELETE' })
 export const startSession = (bankId, mode = 'random') =>
-  request(`/study/session/start?bank_id=${bankId}&mode=${mode}`)
+  request(`/study/session/start?${bankId ? `bank_id=${bankId}&` : ''}mode=${mode}`)
 export const submitSession = (payload) => request('/study/submit', { method: 'POST', data: payload })
 export const listWrongQuestions = () => request('/study/wrong')

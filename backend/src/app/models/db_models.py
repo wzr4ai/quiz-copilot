@@ -53,6 +53,14 @@ class FavoriteBank(SQLModel, table=True):
     __table_args__ = (UniqueConstraint("user_id", "bank_id", name="uq_user_bank_fav"),)
 
 
+class FavoriteQuestion(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    user_id: int = Field(foreign_key="user.id")
+    question_id: int = Field(foreign_key="question.id")
+
+    __table_args__ = (UniqueConstraint("user_id", "question_id", name="uq_user_question_fav"),)
+
+
 class StudySession(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id", index=True)

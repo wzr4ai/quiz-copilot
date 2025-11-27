@@ -6,7 +6,7 @@ from sqlmodel import Session, select
 from app.dependencies import get_current_user, require_admin
 from app.db import get_session
 from app.models import schemas
-from app.models.db_models import Bank, Question as QuestionDB, User
+from app.models.db_models import Bank, FavoriteQuestion, Question as QuestionDB, User
 from app.services.ai_service import AIServiceError, ai_service
 from app.services.ai_stub import generate_questions_from_text
 from app.services.batch_importer import BatchImportService
@@ -84,7 +84,18 @@ async def list_questions(
 ) -> list[schemas.Question]:
     _ensure_bank(session, bank_id)
     rows = session.exec(select(QuestionDB).where(QuestionDB.bank_id == bank_id)).all()
-    return [_to_schema(q) for q in rows]
+    fav_ids = {
+        fav.question_id
+        for fav in session.exec(
+            select(FavoriteQuestion).where(FavoriteQuestion.user_id == current_user.id)
+        ).all()
+    }
+    result: list[schemas.Question] = []
+    for q in rows:
+        item = _to_schema(q)
+        item.is_favorited = q.id in fav_ids
+        result.append(item)
+    return result
 
 
 @router.post("/manual", response_model=schemas.Question, status_code=201)
@@ -110,7 +121,13 @@ async def update_question(
         raise HTTPException(status_code=404, detail="Question not found")
     update_data = payload.model_dump(exclude_none=True)
     if "options" in update_data and update_data["options"] is not None:
-        update_data["options"] = [opt.model_dump() for opt in update_data["options"]]
+        normalized_opts = []
+        for opt in update_data["options"]:
+            if hasattr(opt, "model_dump"):
+                normalized_opts.append(opt.model_dump())
+            elif isinstance(opt, dict):
+                normalized_opts.append({"key": opt.get("key"), "text": opt.get("text")})
+        update_data["options"] = normalized_opts
     for field, value in update_data.items():
         setattr(question, field, value)
     session.add(question)
@@ -165,6 +182,60 @@ async def image_to_quiz(
         created.append(_create_question(session, question_payload))
     return [_to_schema(q) for q in created]
 
+
+@router.get("/favorites", response_model=list[schemas.Question])
+async def list_favorite_questions(
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> list[schemas.Question]:
+    favorites = session.exec(
+        select(QuestionDB)
+        .join(FavoriteQuestion, FavoriteQuestion.question_id == QuestionDB.id)
+        .where(FavoriteQuestion.user_id == current_user.id)
+    ).all()
+    result: list[schemas.Question] = []
+    for q in favorites:
+        item = _to_schema(q)
+        item.is_favorited = True
+        result.append(item)
+    return result
+
+
+@router.post("/{question_id}/favorite", status_code=204)
+async def add_favorite_question(
+    question_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    question = session.get(QuestionDB, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    exists = session.exec(
+        select(FavoriteQuestion).where(
+            FavoriteQuestion.user_id == current_user.id, FavoriteQuestion.question_id == question_id
+        )
+    ).first()
+    if not exists:
+        session.add(FavoriteQuestion(user_id=current_user.id, question_id=question_id))
+        session.commit()
+    return None
+
+
+@router.delete("/{question_id}/favorite", status_code=204)
+async def remove_favorite_question(
+    question_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    favorite = session.exec(
+        select(FavoriteQuestion).where(
+            FavoriteQuestion.user_id == current_user.id, FavoriteQuestion.question_id == question_id
+        )
+    ).first()
+    if favorite:
+        session.delete(favorite)
+        session.commit()
+    return None
 
 @router.post("/ai/batch-import", response_model=schemas.BatchImportResponse)
 async def batch_import(

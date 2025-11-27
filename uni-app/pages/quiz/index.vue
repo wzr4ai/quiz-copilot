@@ -15,6 +15,12 @@
 				<button class="ghost small" :loading="loading" @click="initSession">刷新题目</button>
 			</view>
 		</view>
+		<view class="toggles">
+			<label class="switch-row">
+				<text>实时显示解析</text>
+				<switch :checked="realtime" @change="(e) => (realtime.value = e.detail.value)" />
+			</label>
+		</view>
 
 		<view v-if="loading" class="empty">加载题目中...</view>
 		<view v-else-if="!banks.length" class="empty">暂无题库，请先在录题中心或题库管理创建。</view>
@@ -23,7 +29,12 @@
 		<view class="card" v-else>
 			<view class="card-top">
 				<text class="question-type">{{ typeLabel(currentQuestion.type) }}</text>
-				<button class="edit-btn" size="mini" @click="startEdit(currentQuestion)">编辑</button>
+				<view class="card-actions">
+					<button class="ghost small" @click="toggleFavorite">
+						{{ isFavorited ? '取消收藏' : '收藏' }}
+					</button>
+					<button class="edit-btn" size="mini" @click="startEdit(currentQuestion)">编辑</button>
+				</view>
 			</view>
 			<text class="question-content">{{ currentQuestion.content }}</text>
 
@@ -40,12 +51,34 @@
 				</view>
 			</view>
 
+			<view v-else-if="currentQuestion.type === 'choice_multi'" class="options">
+				<view
+					v-for="opt in currentQuestion.options"
+					:key="opt.key"
+					class="option"
+					:class="{ active: (multiSelections[currentQuestion.id] || []).includes(opt.key) }"
+					@click="toggleMulti(currentQuestion.id, opt.key)"
+				>
+					<text class="opt-key">{{ opt.key }}</text>
+					<text class="opt-text">{{ opt.text }}</text>
+				</view>
+				<button class="ghost small" @click="confirmMulti">确认</button>
+			</view>
+
 			<view v-else class="textarea-wrap">
 				<textarea
 					v-model="answers[currentQuestion.id]"
 					placeholder="输入你的答案..."
 					class="textarea"
 				/>
+			</view>
+
+			<view v-if="feedback[currentQuestion.id]" class="feedback">
+				<text :class="['status', feedback[currentQuestion.id].correct ? 'ok' : 'bad']">
+					{{ feedback[currentQuestion.id].correct ? '回答正确' : '回答错误' }}
+				</text>
+				<text class="hint">正确答案：{{ feedback[currentQuestion.id].correctAnswer }}</text>
+				<text class="analysis">解析：{{ feedback[currentQuestion.id].analysis || '无' }}</text>
 			</view>
 
 			<view v-if="editingId === currentQuestion.id" class="edit-panel">
@@ -78,10 +111,20 @@
 <script setup>
 import { onLoad } from '@dcloudio/uni-app'
 import { computed, reactive, ref } from 'vue'
-import { fetchBanks, getToken, startSession, submitSession, updateQuestionApi } from '../../services/api'
+import {
+  favoriteQuestion,
+  fetchBanks,
+  fetchFavoriteQuestions,
+  getToken,
+  startSession,
+  submitSession,
+  unfavoriteQuestion,
+  updateQuestionApi,
+} from '../../services/api'
 
 const questions = ref([])
 const answers = reactive({})
+const multiSelections = reactive({})
 const currentIndex = ref(0)
 const sessionId = ref('')
 const bankId = ref('')
@@ -100,6 +143,9 @@ const editForm = reactive({
   standard_answer: '',
   analysis: '',
 })
+const realtime = ref(false)
+const feedback = reactive({})
+const isFavorited = ref(false)
 
 const currentQuestion = computed(() => questions.value[currentIndex.value])
 
@@ -138,19 +184,25 @@ const initSession = async () => {
   if (!getToken()) {
     return uni.showToast({ title: '请先登录', icon: 'none' })
   }
-  if (!bankId.value) {
+  if (mode.value !== 'favorite' && !bankId.value) {
     return uni.showToast({ title: '请先选择题库', icon: 'none' })
   }
   loading.value = true
   try {
-    const res = await startSession(bankId.value, mode.value)
+    const res = await startSession(mode.value === 'favorite' ? '' : bankId.value, mode.value)
     sessionId.value = res.session_id
     questions.value = res.questions || []
     currentIndex.value = 0
     Object.keys(answers).forEach((key) => delete answers[key])
+    Object.keys(multiSelections).forEach((key) => delete multiSelections[key])
+    feedbackClear()
     questions.value.forEach((q) => {
       answers[q.id] = ''
+      if (q.type === 'choice_multi') {
+        multiSelections[q.id] = []
+      }
     })
+    syncFavoriteStatus()
   } catch (err) {
     uni.showToast({ title: err.message || '加载题目失败', icon: 'none' })
   } finally {
@@ -176,11 +228,36 @@ const onBankChange = (event) => {
 
 const selectOption = (questionId, value) => {
   answers[questionId] = value
+  if (realtime.value) {
+    showFeedback(questionId)
+  }
+}
+
+const toggleMulti = (questionId, value) => {
+  if (!multiSelections[questionId]) multiSelections[questionId] = []
+  const idx = multiSelections[questionId].indexOf(value)
+  if (idx >= 0) {
+    multiSelections[questionId].splice(idx, 1)
+  } else {
+    multiSelections[questionId].push(value)
+  }
+}
+
+const confirmMulti = () => {
+  const q = currentQuestion.value
+  if (!q) return
+  answers[q.id] = (multiSelections[q.id] || []).join(',')
+  if (realtime.value) {
+    showFeedback(q.id)
+  } else {
+    next()
+  }
 }
 
 const next = async () => {
   if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value += 1
+    isFavorited.value = !!questions.value[currentIndex.value]?.is_favorited
     return
   }
   await submit()
@@ -189,6 +266,13 @@ const next = async () => {
 const submit = async () => {
   if (!sessionId.value) {
     return uni.showToast({ title: '暂无练习会话', icon: 'none' })
+  }
+  if (realtime.value && Object.keys(feedback).length < questions.value.length) {
+    // ensure all answered before提交
+    const unanswered = questions.value.find((q) => !feedback[q.id] && !answers[q.id])
+    if (unanswered) {
+      return uni.showToast({ title: '还有题目未作答', icon: 'none' })
+    }
   }
   submitting.value = true
   try {
@@ -216,6 +300,7 @@ const submit = async () => {
 const prev = () => {
   if (currentIndex.value > 0) {
     currentIndex.value -= 1
+    isFavorited.value = !!questions.value[currentIndex.value]?.is_favorited
   }
 }
 
@@ -256,6 +341,50 @@ const saveEdit = async () => {
     savingEdit.value = false
   }
 }
+
+const showFeedback = (questionId) => {
+  const q = questions.value.find((item) => item.id === questionId)
+  if (!q) return
+  const userAns = (answers[questionId] || '').trim()
+  const correct = (q.standard_answer || '').trim()
+  const normalizedUser = q.type === 'choice_multi' ? userAns.split(',').map((s) => s.trim()).filter(Boolean).sort().join(',') : userAns.toLowerCase()
+  const normalizedCorrect =
+    q.type === 'choice_multi'
+      ? correct.split(',').map((s) => s.trim()).filter(Boolean).sort().join(',')
+      : correct.toLowerCase()
+  feedback[questionId] = {
+    correct: normalizedUser === normalizedCorrect && normalizedUser !== '',
+    correctAnswer: correct || '未提供',
+    analysis: q.analysis,
+  }
+}
+
+const feedbackClear = () => {
+  Object.keys(feedback).forEach((k) => delete feedback[k])
+}
+
+const toggleFavorite = async () => {
+  const q = currentQuestion.value
+  if (!q) return
+  try {
+    if (isFavorited.value) {
+      await unfavoriteQuestion(q.id)
+      isFavorited.value = false
+      q.is_favorited = false
+    } else {
+      await favoriteQuestion(q.id)
+      isFavorited.value = true
+      q.is_favorited = true
+    }
+  } catch (err) {
+    uni.showToast({ title: err.message || '操作失败', icon: 'none' })
+  }
+}
+
+const syncFavoriteStatus = () => {
+  const current = questions.value[currentIndex.value]
+  isFavorited.value = !!current?.is_favorited
+}
 </script>
 
 <style>
@@ -283,6 +412,17 @@ const saveEdit = async () => {
 .meta {
 	font-size: 24rpx;
 	color: #64748b;
+}
+
+.toggles {
+	display: flex;
+	justify-content: flex-end;
+}
+
+.switch-row {
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
 }
 
 .picker-group {
@@ -327,6 +467,12 @@ const saveEdit = async () => {
 	font-size: 32rpx;
 	color: #0f172a;
 	line-height: 1.6;
+}
+
+.card-actions {
+	display: flex;
+	gap: 10rpx;
+	align-items: center;
 }
 
 .options {
@@ -379,6 +525,32 @@ const saveEdit = async () => {
 	padding: 16rpx;
 	background: #f8fafc;
 	box-sizing: border-box;
+}
+
+.feedback {
+	border-top: 1rpx dashed #e2e8f0;
+	padding-top: 12rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 6rpx;
+}
+
+.status {
+	font-size: 26rpx;
+	font-weight: 700;
+}
+
+.status.ok {
+	color: #16a34a;
+}
+
+.status.bad {
+	color: #dc2626;
+}
+
+.analysis {
+	color: #475569;
+	font-size: 24rpx;
 }
 
 .footer {

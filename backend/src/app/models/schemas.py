@@ -35,6 +35,7 @@ class QuestionBase(BaseModel):
     options: List[Option] = Field(default_factory=list)
     standard_answer: str
     analysis: Optional[str] = None
+    is_favorited: bool = False
 
 
 class Question(QuestionBase):
@@ -96,6 +97,9 @@ class StudyQuestion(BaseModel):
     content: str
     type: str
     options: List[Option] = Field(default_factory=list)
+    standard_answer: Optional[str] = None
+    analysis: Optional[str] = None
+    is_favorited: bool = False
 
 
 class StartSessionResponse(BaseModel):

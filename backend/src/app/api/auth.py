@@ -49,10 +49,16 @@ async def login(
     form_data: OAuth2PasswordRequestForm = Depends(), session: Session = Depends(get_session)
 ) -> TokenResponse:
     user = session.exec(select(User).where(User.username == form_data.username)).first()
-    if user is None or not verify_password(form_data.password, user.hashed_password):
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="用户不存在",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户名或密码错误",
+            detail="密码错误",
             headers={"WWW-Authenticate": "Bearer"},
         )
     token = create_access_token({"sub": user.username, "role": user.role})

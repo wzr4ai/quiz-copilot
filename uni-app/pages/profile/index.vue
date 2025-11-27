@@ -70,21 +70,37 @@ const handleUnified = async () => {
     role.value = res.role
     uni.showToast({ title: '登录成功', icon: 'success' })
   } catch (err) {
-    // 登录失败，询问是否注册
-    const modal = await uni.showModal({
-      title: '未找到账号',
-      content: '该账号不存在，是否立即注册并登录？',
-      confirmText: '注册',
-    })
-    if (modal.confirm) {
+    const msg = err?.message || ''
+    if (msg.includes('密码错误')) {
+      uni.showToast({ title: '密码错误，请重试', icon: 'none' })
+      loading.value = false
+      return
+    }
+    if (msg.includes('不存在')) {
+      const modal = await uni.showModal({
+        title: '账号不存在',
+        content: '未找到该账号，是否注册并登录？',
+        confirmText: '注册',
+      })
+      if (!modal.confirm) {
+        loading.value = false
+        return
+      }
       try {
         const res = await register({ username: username.value, password: password.value })
         token.value = getToken()
         role.value = res.role
         uni.showToast({ title: '注册成功并已登录', icon: 'success' })
       } catch (regErr) {
-        uni.showToast({ title: regErr.message || '注册失败', icon: 'none' })
+        const rmsg = regErr.message || ''
+        if (rmsg.includes('已存在')) {
+          uni.showToast({ title: '账号已存在，请检查密码', icon: 'none' })
+        } else {
+          uni.showToast({ title: rmsg || '注册失败', icon: 'none' })
+        }
       }
+    } else {
+      uni.showToast({ title: msg || '登录失败，请重试', icon: 'none' })
     }
   }
   loading.value = false

@@ -104,35 +104,44 @@
 			<view v-else-if="!questions.length" class="empty">当前题库暂无题目。</view>
 			<view v-else class="question-list">
 				<view v-for="question in questions" :key="question.id" class="question-card">
-					<view class="question-row">
-						<text class="label">题型</text>
-						<view class="chips">
-							<view
-								v-for="type in questionTypes"
-								:key="type.value"
-								:class="['chip', question.type === type.value ? 'chip-active' : '']"
-								@click="setQuestionType(question, type.value)"
-							>
-								{{ type.label }}
+					<view class="question-summary" @click="toggleQuestion(question.id)">
+						<view class="summary-left">
+							<text class="summary-title">{{ truncate(question.content) }}</text>
+							<text class="summary-meta">题型：{{ typeLabel(question.type) }}</text>
+						</view>
+						<text class="arrow">{{ expandedId === question.id ? '▲' : '▼' }}</text>
+					</view>
+					<view v-if="expandedId === question.id" class="question-detail">
+						<view class="question-row">
+							<text class="label">题型</text>
+							<view class="chips">
+								<view
+									v-for="type in questionTypes"
+									:key="type.value"
+									:class="['chip', question.type === type.value ? 'chip-active' : '']"
+									@click="setQuestionType(question, type.value)"
+								>
+									{{ type.label }}
+								</view>
 							</view>
 						</view>
-					</view>
-					<input v-model="question.content" class="input" />
-					<view v-if="question.type === 'choice_single'" class="options">
-						<view v-for="(opt, idx) in question.options" :key="idx" class="option">
-							<text class="opt-key">{{ opt.key }}</text>
-							<input v-model="opt.text" class="opt-input" />
-							<button size="mini" class="ghost mini" @click="removeOption(question, idx)">-</button>
+						<input v-model="question.content" class="input" />
+						<view v-if="question.type !== 'short_answer'" class="options">
+							<view v-for="(opt, idx) in question.options" :key="idx" class="option">
+								<text class="opt-key">{{ opt.key }}</text>
+								<input v-model="opt.text" class="opt-input" />
+								<button size="mini" class="ghost mini" @click="removeOption(question, idx)">-</button>
+							</view>
+							<button class="ghost mini" @click="addOption(question)">添加选项</button>
 						</view>
-						<button class="ghost mini" @click="addOption(question)">添加选项</button>
-					</view>
-					<input v-model="question.standard_answer" class="input" />
-					<textarea v-model="question.analysis" class="textarea" placeholder="解析" />
-					<view class="card-actions">
-						<button size="mini" :loading="savingQuestionId === question.id" @click="saveQuestion(question)">
-							保存
-						</button>
-						<button size="mini" type="warn" @click="removeQuestion(question.id)">删除</button>
+						<input v-model="question.standard_answer" class="input" />
+						<textarea v-model="question.analysis" class="textarea" placeholder="解析" />
+						<view class="card-actions">
+							<button size="mini" :loading="savingQuestionId === question.id" @click="saveQuestion(question)">
+								保存
+							</button>
+							<button size="mini" type="warn" @click="removeQuestion(question.id)">删除</button>
+						</view>
 					</view>
 				</view>
 			</view>
@@ -165,6 +174,7 @@ const questions = ref([])
 const selectedBankId = ref(null)
 const creatingQuestion = ref(false)
 const savingQuestionId = ref(null)
+const expandedId = ref(null)
 const importDir = ref('')
 const importRecursive = ref(true)
 const importLoading = ref(false)
@@ -412,6 +422,20 @@ const removeQuestion = async (questionId) => {
   }
 }
 
+const toggleQuestion = (id) => {
+  expandedId.value = expandedId.value === id ? null : id
+}
+
+const typeLabel = (type) => {
+  const found = questionTypes.find((t) => t.value === type)
+  return found ? found.label : type
+}
+
+const truncate = (text, len = 60) => {
+  if (!text) return ''
+  return text.length > len ? `${text.slice(0, len)}...` : text
+}
+
 const runBatchImport = async () => {
   if (!selectedBankId.value) {
     return uni.showToast({ title: '请先选择题库', icon: 'none' })
@@ -594,39 +618,40 @@ const runBatchImport = async () => {
 .question-card {
 	border: 1rpx solid #e2e8f0;
 	border-radius: 12rpx;
+	padding: 0;
+	overflow: hidden;
+}
+
+.question-summary {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 12rpx;
+	background: #f8fafc;
+	border-bottom: 1rpx solid #e2e8f0;
+}
+
+.summary-left {
+	display: flex;
+	flex-direction: column;
+	gap: 4rpx;
+}
+
+.summary-title {
+	font-size: 26rpx;
+	color: #0f172a;
+}
+
+.summary-meta {
+	font-size: 22rpx;
+	color: #64748b;
+}
+
+.question-detail {
 	padding: 12rpx;
 	display: flex;
 	flex-direction: column;
 	gap: 8rpx;
-}
-
-.question-row {
-	display: flex;
-	justify-content: space-between;
-	align-items: center;
-}
-
-.label {
-	font-size: 24rpx;
-	color: #475569;
-}
-
-.chips {
-	display: flex;
-	gap: 10rpx;
-}
-
-.chip {
-	padding: 8rpx 14rpx;
-	border-radius: 12rpx;
-	border: 1rpx solid #cbd5e1;
-	color: #0f172a;
-}
-
-.chip-active {
-	background: #0ea5e9;
-	color: #ffffff;
-	border-color: #0ea5e9;
 }
 
 .options {

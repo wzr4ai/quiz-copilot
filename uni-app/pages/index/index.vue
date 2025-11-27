@@ -15,6 +15,10 @@
 					<text class="action-label">开始练习</text>
 					<text class="action-desc">随机题库</text>
 				</view>
+				<view class="action" @click="toQuiz('', 'favorite')">
+					<text class="action-label">收藏刷题</text>
+					<text class="action-desc">练收藏</text>
+				</view>
 				<view v-if="isAdmin" class="action" @click="toEditor('text')">
 					<text class="action-label">文本导入</text>
 					<text class="action-desc">贴文本生成题</text>
@@ -56,14 +60,17 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
+import { onShow } from '@dcloudio/uni-app'
 import { fetchBanks, getRole, getToken } from '../../services/api'
 
 const banks = ref([])
 const loading = ref(false)
-const isAdmin = computed(() => getRole() === 'admin')
+const role = ref(getRole() || '')
+const isAdmin = computed(() => role.value === 'admin')
 
 const loadBanks = async () => {
+  role.value = getRole() || ''
   if (!getToken()) {
     banks.value = []
     return
@@ -79,7 +86,7 @@ const loadBanks = async () => {
   }
 }
 
-onMounted(loadBanks)
+onShow(loadBanks)
 
 const toQuiz = (bankId, mode = 'random') => {
   uni.navigateTo({ url: `/pages/quiz/index?bankId=${bankId || ''}&mode=${mode}` })

@@ -7,7 +7,14 @@ from sqlmodel import Session, select
 from app.dependencies import get_current_user
 from app.db import get_session
 from app.models import schemas
-from app.models.db_models import Bank, Question as QuestionDB, StudySession, User, WrongRecord
+from app.models.db_models import (
+    Bank,
+    FavoriteQuestion,
+    Question as QuestionDB,
+    StudySession,
+    User,
+    WrongRecord,
+)
 
 router = APIRouter()
 
@@ -38,14 +45,24 @@ def _to_question(q: QuestionDB) -> schemas.Question:
 
 @router.get("/session/start", response_model=schemas.StartSessionResponse)
 async def start_session(
-    bank_id: int = Query(..., description="题库 ID"),
-    mode: str = Query("random", description="练习模式：random / ordered / wrong"),
+    bank_id: int | None = Query(None, description="题库 ID"),
+    mode: str = Query("random", description="练习模式：random / ordered / wrong / favorite"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> schemas.StartSessionResponse:
-    _ensure_bank(session, bank_id)
-    query = select(QuestionDB).where(QuestionDB.bank_id == bank_id)
-    questions = session.exec(query).all()
+    if mode != "favorite":
+        if bank_id is None:
+            raise HTTPException(status_code=400, detail="bank_id is required for this mode")
+        _ensure_bank(session, bank_id)
+        query = select(QuestionDB).where(QuestionDB.bank_id == bank_id)
+        questions = session.exec(query).all()
+    else:
+        fav_query = select(QuestionDB).join(FavoriteQuestion, FavoriteQuestion.question_id == QuestionDB.id).where(
+            FavoriteQuestion.user_id == current_user.id
+        )
+        if bank_id:
+            fav_query = fav_query.where(QuestionDB.bank_id == bank_id)
+        questions = session.exec(fav_query).all()
 
     if mode == "wrong":
         wrong_ids = {
@@ -61,7 +78,21 @@ async def start_session(
     else:
         questions.sort(key=lambda x: x.id)
 
-    study_questions = [_to_study_question(q) for q in questions]
+    fav_ids = {
+        fav.question_id
+        for fav in session.exec(
+            select(FavoriteQuestion).where(FavoriteQuestion.user_id == current_user.id)
+        ).all()
+    }
+    study_questions = [
+        schemas.StudyQuestion(
+            **_to_study_question(q).model_dump(),
+            standard_answer=q.standard_answer,
+            analysis=q.analysis,
+            is_favorited=q.id in fav_ids,
+        )
+        for q in questions
+    ]
     return schemas.StartSessionResponse(
         session_id=f"session-{bank_id}-{mode}-{current_user.id}", questions=study_questions
     )
