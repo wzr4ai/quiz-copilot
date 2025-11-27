@@ -18,7 +18,7 @@
 		<view class="toggles">
 			<label class="switch-row">
 				<text>实时显示解析</text>
-				<switch :checked="realtime" @change="(e) => (realtime.value = e.detail.value)" />
+				<switch :checked="realtime" @change="onRealtimeChange" />
 			</label>
 		</view>
 
@@ -33,7 +33,7 @@
 					<button class="ghost small" @click="toggleFavorite">
 						{{ isFavorited ? '取消收藏' : '收藏' }}
 					</button>
-					<button class="edit-btn" size="mini" @click="startEdit(currentQuestion)">编辑</button>
+					<button v-if="isAdmin" class="edit-btn" size="mini" @click="startEdit(currentQuestion)">编辑</button>
 				</view>
 			</view>
 			<text class="question-content">{{ currentQuestion.content }}</text>
@@ -115,6 +115,7 @@ import {
   favoriteQuestion,
   fetchBanks,
   fetchFavoriteQuestions,
+  getRole,
   getToken,
   startSession,
   submitSession,
@@ -146,6 +147,8 @@ const editForm = reactive({
 const realtime = ref(false)
 const feedback = reactive({})
 const isFavorited = ref(false)
+const role = ref(getRole() || '')
+const isAdmin = computed(() => role.value === 'admin')
 
 const currentQuestion = computed(() => questions.value[currentIndex.value])
 
@@ -213,6 +216,7 @@ const initSession = async () => {
 onLoad((options) => {
   bankId.value = options && options.bankId ? Number(options.bankId) : ''
   mode.value = (options && options.mode) || 'random'
+  role.value = getRole() || ''
   loadBanks().then(() => initSession())
 })
 
@@ -361,6 +365,10 @@ const showFeedback = (questionId) => {
 
 const feedbackClear = () => {
   Object.keys(feedback).forEach((k) => delete feedback[k])
+}
+
+const onRealtimeChange = (e) => {
+  realtime.value = !!(e?.detail?.value)
 }
 
 const toggleFavorite = async () => {

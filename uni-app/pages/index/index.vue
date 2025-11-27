@@ -113,7 +113,16 @@ const toProfile = () => {
 }
 
 const openGit = () => {
-  uni.navigateTo({ url: 'https://github.com/wzr4ai/quiz-copilots' })
+  const url = 'https://github.com/wzr4ai/quiz-copilot'
+  /* #ifdef H5 */
+  window.open(url, '_blank')
+  /* #endif */
+  /* #ifndef H5 */
+  uni.setClipboardData({
+    data: url,
+    success: () => uni.showToast({ title: '链接已复制，可在浏览器打开', icon: 'none' }),
+  })
+  /* #endif */
 }
 </script>
 

@@ -11,7 +11,7 @@ from app.services.ai_service import AIServiceError, ai_service
 from app.services.ai_stub import generate_questions_from_text
 from app.services.batch_importer import BatchImportService
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 logger = logging.getLogger(__name__)
 
 

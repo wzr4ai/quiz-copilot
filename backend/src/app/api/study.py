@@ -16,7 +16,7 @@ from app.models.db_models import (
     WrongRecord,
 )
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 
 def _ensure_bank(session: Session, bank_id: int) -> None:
@@ -84,15 +84,15 @@ async def start_session(
             select(FavoriteQuestion).where(FavoriteQuestion.user_id == current_user.id)
         ).all()
     }
-    study_questions = [
-        schemas.StudyQuestion(
-            **_to_study_question(q).model_dump(),
+    study_questions: list[schemas.StudyQuestion] = []
+    for q in questions:
+        base = _to_study_question(q).model_dump(exclude_none=True, exclude_defaults=True)
+        base.update(
             standard_answer=q.standard_answer,
             analysis=q.analysis,
             is_favorited=q.id in fav_ids,
         )
-        for q in questions
-    ]
+        study_questions.append(schemas.StudyQuestion(**base))
     return schemas.StartSessionResponse(
         session_id=f"session-{bank_id}-{mode}-{current_user.id}", questions=study_questions
     )

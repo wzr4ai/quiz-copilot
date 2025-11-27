@@ -6,7 +6,7 @@ from app.db import get_session
 from app.models import schemas
 from app.models.db_models import Bank, FavoriteBank, User
 
-router = APIRouter()
+router = APIRouter(redirect_slashes=False)
 
 
 def _to_schema(bank: Bank) -> schemas.Bank:
