@@ -5,10 +5,19 @@
 				<text class="title">练习中</text>
 				<text class="meta">模式：{{ modeLabel }} ｜ 第 {{ currentIndex + 1 }} / {{ questions.length }} 题</text>
 			</view>
-			<button class="ghost small" :loading="loading" @click="initSession">刷新题目</button>
+			<view class="picker-group">
+				<picker mode="selector" :range="banks" range-key="title" @change="onBankChange">
+					<view class="picker">
+						<text>{{ currentBankLabel }}</text>
+						<text class="arrow">▼</text>
+					</view>
+				</picker>
+				<button class="ghost small" :loading="loading" @click="initSession">刷新题目</button>
+			</view>
 		</view>
 
 		<view v-if="loading" class="empty">加载题目中...</view>
+		<view v-else-if="!banks.length" class="empty">暂无题库，请先在录题中心或题库管理创建。</view>
 		<view v-else-if="!currentQuestion" class="empty">暂无题目，先去录入吧。</view>
 
 		<view class="card" v-else>
@@ -69,7 +78,7 @@
 <script setup>
 import { onLoad } from '@dcloudio/uni-app'
 import { computed, reactive, ref } from 'vue'
-import { startSession, submitSession, updateQuestionApi } from '../../services/api'
+import { fetchBanks, getToken, startSession, submitSession, updateQuestionApi } from '../../services/api'
 
 const questions = ref([])
 const answers = reactive({})
@@ -81,6 +90,8 @@ const loading = ref(false)
 const submitting = ref(false)
 const editingId = ref(null)
 const savingEdit = ref(false)
+const banks = ref([])
+const LAST_BANK_KEY = 'last_practice_bank_id'
 const editForm = reactive({
   id: null,
   content: '',
@@ -98,16 +109,41 @@ const modeLabel = computed(() => {
   return '随机'
 })
 
+const currentBankLabel = computed(() => {
+  const found = banks.value.find((b) => b.id === bankId.value)
+  return found ? found.title : '选择题库'
+})
+
 const typeLabel = (type) => {
   if (type === 'choice_single') return '单选题'
   if (type === 'short_answer') return '简答题'
   return type
 }
 
+const loadBanks = async () => {
+  try {
+    const res = await fetchBanks()
+    banks.value = res || []
+    if (!bankId.value && banks.value.length) {
+      const saved = uni.getStorageSync(LAST_BANK_KEY)
+      const found = banks.value.find((b) => b.id === saved)
+      bankId.value = found ? found.id : banks.value[0].id
+    }
+  } catch (err) {
+    uni.showToast({ title: err.message || '题库加载失败', icon: 'none' })
+  }
+}
+
 const initSession = async () => {
+  if (!getToken()) {
+    return uni.showToast({ title: '请先登录', icon: 'none' })
+  }
+  if (!bankId.value) {
+    return uni.showToast({ title: '请先选择题库', icon: 'none' })
+  }
   loading.value = true
   try {
-    const res = await startSession(bankId.value || 1, mode.value)
+    const res = await startSession(bankId.value, mode.value)
     sessionId.value = res.session_id
     questions.value = res.questions || []
     currentIndex.value = 0
@@ -123,10 +159,20 @@ const initSession = async () => {
 }
 
 onLoad((options) => {
-  bankId.value = (options && options.bankId) || ''
+  bankId.value = options && options.bankId ? Number(options.bankId) : ''
   mode.value = (options && options.mode) || 'random'
-  initSession()
+  loadBanks().then(() => initSession())
 })
+
+const onBankChange = (event) => {
+  const idx = Number(event.detail.value)
+  const picked = banks.value[idx]
+  if (picked) {
+    bankId.value = picked.id
+    uni.setStorageSync(LAST_BANK_KEY, bankId.value)
+    initSession()
+  }
+}
 
 const selectOption = (questionId, value) => {
   answers[questionId] = value
@@ -237,6 +283,27 @@ const saveEdit = async () => {
 .meta {
 	font-size: 24rpx;
 	color: #64748b;
+}
+
+.picker-group {
+	display: flex;
+	align-items: center;
+	gap: 10rpx;
+}
+
+.picker {
+	background: #f8fafc;
+	border: 1rpx solid #e2e8f0;
+	border-radius: 12rpx;
+	padding: 10rpx 14rpx;
+	display: flex;
+	align-items: center;
+	gap: 6rpx;
+}
+
+.arrow {
+	color: #94a3b8;
+	font-size: 24rpx;
 }
 
 .card {

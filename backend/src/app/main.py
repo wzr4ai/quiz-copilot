@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import auth, banks, questions, study
 from app.core.config import settings
+from app.db import init_db
 
 
 def create_app() -> FastAPI:
@@ -29,6 +30,10 @@ def create_app() -> FastAPI:
     @application.get("/health", tags=["Health"])
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @application.on_event("startup")
+    async def startup_event() -> None:
+        init_db()
 
     return application
 

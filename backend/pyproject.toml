@@ -12,6 +12,9 @@ dependencies = [
     "psycopg[binary]",
     "pytest>=9.0.1",
     "httpx>=0.28.1",
+    "python-jose[cryptography]",
+    "passlib[bcrypt]",
+    "python-multipart>=0.0.20",
 ]
 
 [tool.setuptools]

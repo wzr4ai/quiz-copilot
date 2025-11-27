@@ -15,11 +15,11 @@
 					<text class="action-label">开始练习</text>
 					<text class="action-desc">随机题库</text>
 				</view>
-				<view class="action" @click="toEditor('text')">
+				<view v-if="isAdmin" class="action" @click="toEditor('text')">
 					<text class="action-label">文本导入</text>
 					<text class="action-desc">贴文本生成题</text>
 				</view>
-				<view class="action" @click="toEditor('image')">
+				<view v-if="isAdmin" class="action" @click="toEditor('image')">
 					<text class="action-label">拍照导入</text>
 					<text class="action-desc">识别试卷</text>
 				</view>
@@ -27,9 +27,13 @@
 					<text class="action-label">错题重练</text>
 					<text class="action-desc">针对弱项</text>
 				</view>
-				<view class="action alt" @click="toManager">
+				<view v-if="isAdmin" class="action alt" @click="toManager">
 					<text class="action-label">题库管理</text>
 					<text class="action-desc">增删改查</text>
+				</view>
+				<view class="action neutral" @click="toProfile">
+					<text class="action-label">我的</text>
+					<text class="action-desc">登录 / 账户</text>
 				</view>
 			</view>
 		</view>
@@ -52,13 +56,18 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
-import { fetchBanks } from '../../services/api'
+import { computed, onMounted, ref } from 'vue'
+import { fetchBanks, getRole, getToken } from '../../services/api'
 
 const banks = ref([])
 const loading = ref(false)
+const isAdmin = computed(() => getRole() === 'admin')
 
 const loadBanks = async () => {
+  if (!getToken()) {
+    banks.value = []
+    return
+  }
   loading.value = true
   try {
     const res = await fetchBanks()
@@ -82,6 +91,10 @@ const toEditor = (mode) => {
 
 const toManager = () => {
   uni.navigateTo({ url: '/pages/manager/index' })
+}
+
+const toProfile = () => {
+  uni.navigateTo({ url: '/pages/profile/index' })
 }
 </script>
 
@@ -169,6 +182,11 @@ const toManager = () => {
 .action.alt {
 	background: #10b981;
 	box-shadow: 0 8rpx 24rpx rgba(16, 185, 129, 0.2);
+}
+
+.action.neutral {
+	background: #6366f1;
+	box-shadow: 0 8rpx 24rpx rgba(99, 102, 241, 0.2);
 }
 
 .bank-list {

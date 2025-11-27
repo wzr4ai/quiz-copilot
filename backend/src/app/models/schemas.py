@@ -68,6 +68,29 @@ class AIImageQuizRequest(BaseModel):
     image_base64: str
 
 
+class BatchImportRequest(BaseModel):
+    bank_id: int
+    directory: str
+    recursive: bool = True
+
+
+class BatchImportFileResult(BaseModel):
+    filename: str
+    imported: int = 0
+    duplicates: int = 0
+    warnings: List[str] = Field(default_factory=list)
+    errors: List[str] = Field(default_factory=list)
+
+
+class BatchImportResponse(BaseModel):
+    total_files: int
+    processed_files: int
+    imported_questions: int
+    duplicate_questions: int
+    failed_files: int
+    file_results: List[BatchImportFileResult]
+
+
 class StudyQuestion(BaseModel):
     id: int
     content: str

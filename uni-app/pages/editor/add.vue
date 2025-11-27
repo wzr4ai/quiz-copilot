@@ -6,12 +6,25 @@
 				<text class="title">AI 录题中心</text>
 				<text class="desc">先选择题库，再用文本或图片让 AI 识别题目。</text>
 			</view>
-			<picker mode="selector" :range="banks" range-key="title" @change="onBankChange">
-				<view class="picker">
-					<text>{{ currentBankLabel }}</text>
-					<text class="arrow">▼</text>
-				</view>
-			</picker>
+			<view class="picker-group">
+				<picker mode="selector" :range="banks" range-key="title" @change="onBankChange">
+					<view class="picker">
+						<text>{{ currentBankLabel }}</text>
+						<text class="arrow">▼</text>
+					</view>
+				</picker>
+				<button class="ghost mini" @click="toggleCreateBank">新建</button>
+			</view>
+		</view>
+
+		<view v-if="creatingBank" class="card">
+			<text class="card-title">新建题库</text>
+			<input v-model="newBankTitle" placeholder="题库名称" class="input" />
+			<input v-model="newBankDesc" placeholder="描述（可选）" class="input" />
+			<view class="actions">
+				<button class="ghost" @click="toggleCreateBank">取消</button>
+				<button class="primary" @click="createNewBank">创建</button>
+			</view>
 		</view>
 
 		<view class="tabs">
@@ -95,7 +108,15 @@
 <script setup>
 import { onLoad } from '@dcloudio/uni-app'
 import { computed, ref } from 'vue'
-import { aiImageToQuiz, aiTextToQuiz, fetchBanks, saveManualQuestion } from '../../services/api'
+import {
+  aiImageToQuiz,
+  aiTextToQuiz,
+  createBank,
+  fetchBanks,
+  getToken,
+  getRole,
+  saveManualQuestion,
+} from '../../services/api'
 
 const mode = ref('text')
 const inputText = ref('')
@@ -105,8 +126,12 @@ const imagePreview = ref('')
 const recognizedQuestions = ref([])
 const banks = ref([])
 const selectedBankId = ref(null)
+const creatingBank = ref(false)
+const newBankTitle = ref('')
+const newBankDesc = ref('')
 const loading = ref(false)
 const saving = ref(false)
+const LAST_BANK_KEY = 'last_import_bank_id'
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
@@ -123,15 +148,29 @@ onLoad((options) => {
   if (options && options.mode === 'image') {
     mode.value = 'image'
   }
+  if (getRole() !== 'admin') {
+    uni.showToast({ title: '需要管理员权限', icon: 'none' })
+    return
+  }
   loadBanks()
 })
 
 const loadBanks = async () => {
+  if (!getToken()) {
+    uni.showToast({ title: '请先登录后再导入题目', icon: 'none' })
+    return
+  }
+  if (getRole() !== 'admin') {
+    uni.showToast({ title: '需要管理员权限', icon: 'none' })
+    return
+  }
   try {
     const res = await fetchBanks()
     banks.value = res || []
-    if (!selectedBankId.value && banks.value.length) {
-      selectedBankId.value = banks.value[0].id
+    if (!selectedBankId.value) {
+      const saved = uni.getStorageSync(LAST_BANK_KEY)
+      const found = banks.value.find((b) => b.id === saved)
+      selectedBankId.value = found ? found.id : banks.value[0]?.id || null
     }
   } catch (err) {
     uni.showToast({ title: err.message || '加载题库失败', icon: 'none' })
@@ -141,13 +180,43 @@ const loadBanks = async () => {
 const onBankChange = (event) => {
   const idx = Number(event.detail.value)
   selectedBankId.value = banks.value[idx]?.id
+  if (selectedBankId.value) {
+    uni.setStorageSync(LAST_BANK_KEY, selectedBankId.value)
+  }
 }
 
 const setMode = (value) => {
   mode.value = value
 }
 
+const toggleCreateBank = () => {
+  creatingBank.value = !creatingBank.value
+  if (!creatingBank.value) {
+    newBankTitle.value = ''
+    newBankDesc.value = ''
+  }
+}
+
+const createNewBank = async () => {
+  if (!newBankTitle.value.trim()) {
+    return uni.showToast({ title: '请输入题库名称', icon: 'none' })
+  }
+  try {
+    const bank = await createBank({ title: newBankTitle.value, description: newBankDesc.value })
+    banks.value.push(bank)
+    selectedBankId.value = bank.id
+    uni.setStorageSync(LAST_BANK_KEY, bank.id)
+    uni.showToast({ title: '题库已创建', icon: 'success' })
+    toggleCreateBank()
+  } catch (err) {
+    uni.showToast({ title: err.message || '创建失败', icon: 'none' })
+  }
+}
+
 const submitText = async () => {
+  if (!getToken()) {
+    return uni.showToast({ title: '请先登录', icon: 'none' })
+  }
   if (!inputText.value.trim()) {
     return uni.showToast({ title: '请先输入文本', icon: 'none' })
   }
@@ -234,6 +303,9 @@ const toBase64 = (fileObj, path) =>
   })
 
 const submitImage = async () => {
+  if (!getToken()) {
+    return uni.showToast({ title: '请先登录', icon: 'none' })
+  }
   if (!imagePath.value) {
     return uni.showToast({ title: '请先选择图片', icon: 'none' })
   }
@@ -352,6 +424,12 @@ const saveQuestions = async () => {
 	border: 1rpx solid rgba(148, 163, 184, 0.6);
 	border-radius: 14rpx;
 	padding: 12rpx 16rpx;
+	display: flex;
+	align-items: center;
+	gap: 8rpx;
+}
+
+.picker-group {
 	display: flex;
 	align-items: center;
 	gap: 8rpx;

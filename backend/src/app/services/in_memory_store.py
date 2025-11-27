@@ -76,6 +76,9 @@ class InMemoryStore:
         return list(self.banks.values())
 
     def create_question(self, payload: QuestionCreate) -> Question:
+        existing = self._find_duplicate_question(payload)
+        if existing:
+            return existing
         question = Question(id=self._question_id, **payload.model_dump())
         self.questions[question.id] = question
         self._question_id += 1
@@ -115,6 +118,35 @@ class InMemoryStore:
 
     def get_question(self, question_id: int) -> Question | None:
         return self.questions.get(question_id)
+
+    def _find_duplicate_question(self, payload: QuestionCreate) -> Question | None:
+        normalized_content = payload.content.strip()
+        normalized_answer = payload.standard_answer.strip().lower()
+
+        for question in self.questions.values():
+            if question.bank_id != payload.bank_id or question.type != payload.type:
+                continue
+            if question.content.strip() != normalized_content:
+                continue
+
+            # For choice types, also compare options and answers to avoid false positives.
+            if question.type in {"choice_single", "choice_multi"}:
+                if question.standard_answer.strip().lower() != normalized_answer:
+                    continue
+                if len(question.options) != len(payload.options):
+                    continue
+                options_match = all(
+                    q_opt.key == p_opt.key and q_opt.text.strip() == p_opt.text.strip()
+                    for q_opt, p_opt in zip(question.options, payload.options)
+                )
+                if options_match:
+                    return question
+
+            # For short answers, match content + answer
+            if question.type == "short_answer" and question.standard_answer.strip().lower() == normalized_answer:
+                return question
+
+        return None
 
     def get_wrong_question_ids(self) -> List[int]:
         latest: Dict[int, WrongQuestionSummary] = {}

@@ -52,6 +52,28 @@
 
 			<view class="form-card">
 				<view class="row">
+					<text class="label">批量导入</text>
+					<input v-model="importDir" placeholder="服务器目录，如 /data/papers" class="input" />
+					<label class="switch-row">
+						<text>递归扫描子目录</text>
+						<switch :checked="importRecursive" @change="(e) => (importRecursive = e.detail.value)" />
+					</label>
+					<button class="primary" :loading="importLoading" @click="runBatchImport">开始扫描导入</button>
+				</view>
+				<view v-if="importReport" class="import-report">
+					<text class="label">导入结果</text>
+					<text class="meta">文件 {{ importReport.processed_files }}/{{ importReport.total_files }} ｜ 新增 {{ importReport.imported_questions }} ｜ 重复 {{ importReport.duplicate_questions }} ｜ 失败 {{ importReport.failed_files }}</text>
+					<view v-for="file in importReport.file_results" :key="file.filename" class="import-file">
+						<text class="file-name">{{ file.filename }}</text>
+						<text class="meta">导入 {{ file.imported }} ｜ 重复 {{ file.duplicates }}</text>
+						<view v-if="file.errors?.length" class="warn">错误: {{ file.errors.join('；') }}</view>
+						<view v-if="file.warnings?.length" class="warn secondary">警告: {{ file.warnings.join('；') }}</view>
+					</view>
+				</view>
+			</view>
+
+			<view class="form-card">
+				<view class="row">
 					<text class="label">题型</text>
 					<view class="chips">
 						<view
@@ -125,8 +147,11 @@ import {
   createBank,
   deleteBank,
   deleteQuestion,
+  batchImportQuestions,
   fetchBanks,
   fetchQuestions,
+  getToken,
+  getRole,
   saveManualQuestion,
   updateBank,
   updateQuestionApi,
@@ -140,6 +165,10 @@ const questions = ref([])
 const selectedBankId = ref(null)
 const creatingQuestion = ref(false)
 const savingQuestionId = ref(null)
+const importDir = ref('')
+const importRecursive = ref(true)
+const importLoading = ref(false)
+const importReport = ref(null)
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
@@ -164,6 +193,15 @@ const currentBankLabel = computed(() => {
 })
 
 onLoad(() => {
+  if (!getToken()) {
+    uni.showToast({ title: '请先登录', icon: 'none' })
+    return
+  }
+  if (getRole() !== 'admin') {
+    uni.showToast({ title: '需要管理员权限', icon: 'none' })
+    setTimeout(() => uni.switchTab({ url: '/pages/index/index' }), 800)
+    return
+  }
   loadBanks()
 })
 
@@ -373,6 +411,30 @@ const removeQuestion = async (questionId) => {
     }
   }
 }
+
+const runBatchImport = async () => {
+  if (!selectedBankId.value) {
+    return uni.showToast({ title: '请先选择题库', icon: 'none' })
+  }
+  if (!importDir.value.trim()) {
+    return uni.showToast({ title: '请输入目录路径', icon: 'none' })
+  }
+  importLoading.value = true
+  try {
+    const res = await batchImportQuestions({
+      bank_id: selectedBankId.value,
+      directory: importDir.value,
+      recursive: importRecursive.value,
+    })
+    importReport.value = res
+    uni.showToast({ title: '批量导入完成', icon: 'success' })
+    await loadQuestions()
+  } catch (err) {
+    uni.showToast({ title: err.message || '导入失败', icon: 'none' })
+  } finally {
+    importLoading.value = false
+  }
+}
 </script>
 
 <style>
@@ -419,6 +481,34 @@ const removeQuestion = async (questionId) => {
 	display: flex;
 	flex-direction: column;
 	gap: 10rpx;
+}
+
+.import-report {
+	border-top: 1rpx dashed #e2e8f0;
+	padding-top: 10rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 8rpx;
+}
+
+.import-file {
+	border: 1rpx solid #e2e8f0;
+	border-radius: 10rpx;
+	padding: 8rpx;
+}
+
+.file-name {
+	font-size: 24rpx;
+	color: #0f172a;
+}
+
+.warn {
+	color: #dc2626;
+	font-size: 22rpx;
+}
+
+.warn.secondary {
+	color: #b45309;
 }
 
 .input {

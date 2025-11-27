@@ -16,6 +16,7 @@
 * `POST /manual`: 手动录入单题。
 * `POST /ai/text-to-quiz`: **(AI 核心)** 接收长文本，返回结构化题目列表。
 * `POST /ai/image-to-quiz`: **(AI 核心)** 接收图片，返回结构化题目列表。
+* `POST /ai/batch-import`: 扫描服务器指定文件夹下的图片/文本，批量导入题目并返回导入/失败/疑似异常的报告。
 * `PUT /{id}`: 题目修正/编辑。
 
 ### `/api/v1/study` (刷题与判分)
@@ -43,6 +44,7 @@ app.include_router(study.router, prefix="/api/v1/study", tags=["Study"])
 * 使用 `asyncio.create_task` 将长任务异步化，避免阻塞请求。
 
 ## 4. 当前实现备注 (MVP)
-- 采用 `app/services/in_memory_store.py` 作为临时数据层，无数据库依赖，便于前端联调。错题本用“最近一次答题结果”覆盖旧记录，答对后会自动清除错题状态。
-- `app/services/ai_stub.py` 生成示例题目，用于文本/图片导入的接口契约占位，后续替换为真实模型。
+- 持久化切换为 PostgreSQL（连接串读取 `.env` 的 `DATABASE_URL`），使用 SQLModel 定义用户/题库/题目/错题记录/收藏等表，应用启动时自动建表。
+- 认证使用 `OAuth2PasswordBearer`（账号密码登录），密码 Bcrypt 哈希存储，角色包含 `user`/`admin`，仅管理员可管理数据库中的题库与题目。
+- `app/services/ai_stub.py` 生成示例题目，用于文本/图片导入的接口契约占位。
 - 开启了 CORS（默认 `*`），便于 H5 调试；上线时请收敛域名。
