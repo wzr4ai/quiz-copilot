@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, require_admin
@@ -76,26 +77,46 @@ def _ensure_bank(session: Session, bank_id: int) -> None:
         raise HTTPException(status_code=404, detail="Bank not found")
 
 
-@router.get("/", response_model=list[schemas.Question])
+@router.get("/", response_model=schemas.PaginatedQuestions)
 async def list_questions(
     bank_id: int = Query(..., description="题库 ID"),
+    page: int = Query(1, ge=1, description="页码，从 1 开始"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量，默认 10"),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
-) -> list[schemas.Question]:
+) -> schemas.PaginatedQuestions:
     _ensure_bank(session, bank_id)
-    rows = session.exec(select(QuestionDB).where(QuestionDB.bank_id == bank_id)).all()
-    fav_ids = {
-        fav.question_id
-        for fav in session.exec(
-            select(FavoriteQuestion).where(FavoriteQuestion.user_id == current_user.id)
-        ).all()
-    }
+    total_stmt = select(func.count(QuestionDB.id)).where(QuestionDB.bank_id == bank_id)
+    total_result = session.exec(total_stmt).one_or_none()
+    if isinstance(total_result, tuple):
+        total_count = total_result[0] or 0
+    else:
+        total_count = total_result or 0
+    rows = session.exec(
+        select(QuestionDB)
+        .where(QuestionDB.bank_id == bank_id)
+        .order_by(QuestionDB.created_at.desc(), QuestionDB.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    ).all()
+    question_ids = [q.id for q in rows]
+    fav_ids: set[int] = set()
+    if question_ids:
+        fav_ids = {
+            qid
+            for qid in session.exec(
+                select(FavoriteQuestion.question_id).where(
+                    FavoriteQuestion.user_id == current_user.id,
+                    FavoriteQuestion.question_id.in_(question_ids),
+                )
+            ).all()
+        }
     result: list[schemas.Question] = []
     for q in rows:
         item = _to_schema(q)
         item.is_favorited = q.id in fav_ids
         result.append(item)
-    return result
+    return schemas.PaginatedQuestions(items=result, total=total_count, page=page, page_size=page_size)
 
 
 @router.post("/manual", response_model=schemas.Question, status_code=201)

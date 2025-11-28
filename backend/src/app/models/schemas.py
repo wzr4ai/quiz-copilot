@@ -28,6 +28,19 @@ class BankUpdate(BaseModel):
     is_public: Optional[bool] = None
 
 
+class BankMergeRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    is_public: bool = False
+    source_bank_ids: List[int]
+
+
+class BankMergeResponse(BaseModel):
+    bank: Bank
+    merged_questions: int
+    source_bank_ids: List[int]
+
+
 class QuestionBase(BaseModel):
     bank_id: int
     type: str = Field(..., description="choice_single | choice_multi | short_answer")
@@ -57,6 +70,13 @@ class QuestionUpdate(BaseModel):
 
 class ManualQuestionRequest(QuestionCreate):
     """Alias kept for clarity in API signatures."""
+
+
+class PaginatedQuestions(BaseModel):
+    items: List[Question]
+    total: int
+    page: int
+    page_size: int
 
 
 class AIQuizRequest(BaseModel):

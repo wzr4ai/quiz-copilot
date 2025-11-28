@@ -12,7 +12,7 @@
 * `DELETE /{id}`: 删除题库。
 
 ### `/api/v1/questions` (题目管理)
-* `GET /`: 获取某题库下的题目（分页）。
+* `GET /`: 获取某题库下的题目（分页，`bank_id` 必填，支持 `page`/`page_size`，返回 `{ items, total, page, page_size }`）。
 * `POST /manual`: 手动录入单题。
 * `POST /ai/text-to-quiz`: **(AI 核心)** 接收长文本，返回结构化题目列表。
 * `POST /ai/image-to-quiz`: **(AI 核心)** 接收图片，返回结构化题目列表。

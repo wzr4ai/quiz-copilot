@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from pathlib import Path
 from typing import Iterable, List
 
 from sqlmodel import Session, select
 
+from app.core.config import settings
 from app.models.schemas import (
     BatchImportFileResult,
     BatchImportResponse,
@@ -22,6 +24,25 @@ SUPPORTED_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".bmp"}
 SUPPORTED_TEXT_EXT = {".txt", ".md"}
 
 
+def _configure_logger() -> logging.Logger:
+    logger = logging.getLogger("batch_importer")
+    if logger.handlers:
+        return logger
+    level = logging.INFO if settings.app_env == "development" else logging.ERROR
+    logger.setLevel(level)
+    logs_dir = Path(__file__).resolve().parents[3] / "logs"
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    handler = logging.FileHandler(logs_dir / "batch_import.log", encoding="utf-8")
+    handler.setLevel(level)
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+logger = _configure_logger()
+
+
 class BatchImportService:
     def __init__(self, session: Session, ai: AIService) -> None:
         self.session = session
@@ -33,6 +54,7 @@ class BatchImportService:
             raise ValueError("目录不存在或不可访问")
 
         files = list(self._iter_files(directory, recursive=request.recursive))
+        logger.info("Batch import start: dir=%s files=%s bank_id=%s", directory, len(files), request.bank_id)
         file_results: List[BatchImportFileResult] = []
         imported_total = 0
         duplicate_total = 0
@@ -52,6 +74,7 @@ class BatchImportService:
                 result.errors.append("未能解析出题目，可能内容已截断或无法识别")
                 failed_files += 1
                 file_results.append(result)
+                logger.error("Import failed (no questions): %s", file_path)
                 continue
 
             for q in questions:
@@ -78,6 +101,16 @@ class BatchImportService:
                     imported_total += 1
 
             file_results.append(result)
+            if result.errors:
+                logger.error("Import errors for %s: %s", file_path, "; ".join(result.errors))
+            else:
+                logger.info(
+                    "Import done for %s: imported=%s dup=%s warnings=%s",
+                    file_path,
+                    result.imported,
+                    result.duplicates,
+                    len(result.warnings),
+                )
 
         return BatchImportResponse(
             total_files=len(files),

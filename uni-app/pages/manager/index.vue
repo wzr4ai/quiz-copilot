@@ -6,7 +6,10 @@
 					<text class="eyebrow">题库</text>
 					<text class="title">增删改查</text>
 				</view>
-				<button class="ghost" size="mini" @click="resetBankForm">新建题库</button>
+				<view class="header-actions">
+					<button class="ghost" size="mini" @click="resetBankForm">新建题库</button>
+					<button class="ghost" size="mini" @click="goMerge">合并题库</button>
+				</view>
 			</view>
 			<view class="form-card">
 				<input v-model="bankForm.title" placeholder="题库名称" class="input" />
@@ -75,19 +78,23 @@
 			<view class="form-card">
 				<view class="row">
 					<text class="label">题型</text>
-					<view class="chips">
-						<view
-							v-for="type in questionTypes"
-							:key="type.value"
-							:class="['chip', newQuestion.type === type.value ? 'chip-active' : '']"
-							@click="setNewType(type.value)"
-						>
-							{{ type.label }}
-						</view>
+				<view class="chips">
+					<view
+						v-for="type in questionTypes"
+						:key="type.value"
+						:class="['chip', newQuestion.type === type.value ? 'chip-active' : '']"
+						@click="setNewType(type.value)"
+					>
+						<text v-if="type.value === 'choice_single'">🔘</text>
+						<text v-else-if="type.value === 'choice_multi'">☑️</text>
+						<text v-else-if="type.value === 'choice_judgment'">✅❌</text>
+						<text v-else>✏️</text>
+						<text class="chip-text">{{ type.label }}</text>
 					</view>
 				</view>
+				</view>
 				<input v-model="newQuestion.content" placeholder="题干" class="input" />
-				<view v-if="newQuestion.type === 'choice_single'" class="options">
+				<view v-if="newQuestion.type !== 'short_answer'" class="options">
 					<view v-for="(opt, idx) in newQuestion.options" :key="idx" class="option">
 						<text class="opt-key">{{ opt.key }}</text>
 						<input v-model="opt.text" class="opt-input" placeholder="选项内容" />
@@ -95,52 +102,112 @@
 					</view>
 					<button class="ghost mini" @click="addOption(newQuestion)">添加选项</button>
 				</view>
-				<input v-model="newQuestion.standard_answer" placeholder="答案（如 A 或文本）" class="input" />
+				<view v-if="newQuestion.type === 'choice_single'" class="options">
+					<view v-for="(opt, idx) in newQuestion.options" :key="`ans-${idx}`" class="option">
+						<radio
+							:value="opt.key"
+							:checked="newQuestion.standard_answer === opt.key"
+							@change="() => setSingleAnswer(newQuestion, opt.key)"
+						/>
+						<text class="opt-text">{{ opt.key }}. {{ opt.text || '未填写' }}</text>
+					</view>
+				</view>
+				<view v-else-if="newQuestion.type === 'choice_multi'" class="options">
+					<view v-for="(opt, idx) in newQuestion.options" :key="`ans-${idx}`" class="option">
+						<checkbox
+							:value="opt.key"
+							:checked="isMultiChecked(newQuestion, opt.key)"
+							@change="() => toggleMultiAnswer(newQuestion, opt.key)"
+						/>
+						<text class="opt-text">{{ opt.key }}. {{ opt.text || '未填写' }}</text>
+					</view>
+					<text class="hint">多选可勾选多个作为正确答案</text>
+				</view>
+				<input
+					v-else
+					v-model="newQuestion.standard_answer"
+					placeholder="答案（如 A 或文本）"
+					class="input"
+				/>
 				<textarea v-model="newQuestion.analysis" class="textarea" placeholder="解析（可选）" />
 				<button class="primary" :loading="creatingQuestion" @click="createQuestion">添加题目</button>
 			</view>
 
 			<view v-if="questionLoading" class="empty">题目加载中...</view>
 			<view v-else-if="!questions.length" class="empty">当前题库暂无题目。</view>
-			<view v-else class="question-list">
-				<view v-for="question in questions" :key="question.id" class="question-card">
-					<view class="question-summary" @click="toggleQuestion(question.id)">
-						<view class="summary-left">
-							<text class="summary-title">{{ truncate(question.content) }}</text>
-							<text class="summary-meta">题型：{{ typeLabel(question.type) }}</text>
+			<view v-else>
+				<view v-if="questionTotal" class="pagination">
+					<button size="mini" class="ghost" :disabled="questionPage === 1" @click="goPrevPage">上一页</button>
+					<text class="pager-text">第 {{ questionPage }} / {{ totalPages }} 页 · 共 {{ questionTotal }} 题</text>
+					<button size="mini" class="ghost" :disabled="questionPage >= totalPages" @click="goNextPage">
+						下一页
+					</button>
+				</view>
+				<view class="question-list">
+					<view v-for="question in questions" :key="question.id" class="question-card">
+						<view class="question-summary" @click="toggleQuestion(question.id)">
+							<view class="summary-left">
+								<text class="summary-title">{{ truncate(question.content) }}</text>
+								<text class="summary-meta">题型：{{ typeLabel(question.type) }}</text>
+							</view>
+							<text class="arrow">{{ expandedId === question.id ? '▲' : '▼' }}</text>
 						</view>
-						<text class="arrow">{{ expandedId === question.id ? '▲' : '▼' }}</text>
-					</view>
-					<view v-if="expandedId === question.id" class="question-detail">
-						<view class="question-row">
-							<text class="label">题型</text>
-							<view class="chips">
-								<view
-									v-for="type in questionTypes"
-									:key="type.value"
-									:class="['chip', question.type === type.value ? 'chip-active' : '']"
-									@click="setQuestionType(question, type.value)"
-								>
-									{{ type.label }}
+						<view v-if="expandedId === question.id" class="question-detail">
+							<view class="question-row">
+								<text class="label">题型</text>
+								<view class="chips">
+									<view
+										v-for="type in questionTypes"
+										:key="type.value"
+										:class="['chip', question.type === type.value ? 'chip-active' : '']"
+										@click="setQuestionType(question, type.value)"
+									>
+										<text v-if="type.value === 'choice_single'">🔘</text>
+										<text v-else-if="type.value === 'choice_multi'">☑️</text>
+										<text v-else-if="type.value === 'choice_judgment'">✅❌</text>
+										<text v-else>✏️</text>
+										<text class="chip-text">{{ type.label }}</text>
+									</view>
 								</view>
 							</view>
-						</view>
-						<input v-model="question.content" class="input" />
-						<view v-if="question.type !== 'short_answer'" class="options">
-							<view v-for="(opt, idx) in question.options" :key="idx" class="option">
-								<text class="opt-key">{{ opt.key }}</text>
-								<input v-model="opt.text" class="opt-input" />
-								<button size="mini" class="ghost mini" @click="removeOption(question, idx)">-</button>
+							<input v-model="question.content" class="input" />
+							<view v-if="question.type !== 'short_answer'" class="options">
+								<view v-for="(opt, idx) in question.options" :key="idx" class="option">
+									<text class="opt-key">{{ opt.key }}</text>
+									<input v-model="opt.text" class="opt-input" />
+									<button size="mini" class="ghost mini" @click="removeOption(question, idx)">-</button>
+								</view>
+								<button class="ghost mini" @click="addOption(question)">添加选项</button>
 							</view>
-							<button class="ghost mini" @click="addOption(question)">添加选项</button>
-						</view>
-						<input v-model="question.standard_answer" class="input" />
-						<textarea v-model="question.analysis" class="textarea" placeholder="解析" />
-						<view class="card-actions">
-							<button size="mini" :loading="savingQuestionId === question.id" @click="saveQuestion(question)">
-								保存
-							</button>
-							<button size="mini" type="warn" @click="removeQuestion(question.id)">删除</button>
+							<view v-if="question.type === 'choice_single'" class="options">
+								<view v-for="(opt, idx) in question.options" :key="`edit-ans-${idx}`" class="option">
+									<radio
+										:value="opt.key"
+										:checked="question.standard_answer === opt.key"
+										@change="() => setSingleAnswer(question, opt.key)"
+									/>
+									<text class="opt-text">{{ opt.key }}. {{ opt.text || '未填写' }}</text>
+								</view>
+							</view>
+							<view v-else-if="question.type === 'choice_multi'" class="options">
+								<view v-for="(opt, idx) in question.options" :key="`edit-ans-${idx}`" class="option">
+									<checkbox
+										:value="opt.key"
+										:checked="isMultiChecked(question, opt.key)"
+										@change="() => toggleMultiAnswer(question, opt.key)"
+									/>
+									<text class="opt-text">{{ opt.key }}. {{ opt.text || '未填写' }}</text>
+								</view>
+								<text class="hint">多选可勾选多个作为正确答案</text>
+							</view>
+							<input v-else v-model="question.standard_answer" class="input" />
+							<textarea v-model="question.analysis" class="textarea" placeholder="解析" />
+							<view class="card-actions">
+								<button size="mini" :loading="savingQuestionId === question.id" @click="saveQuestion(question)">
+									保存
+								</button>
+								<button size="mini" type="warn" @click="removeQuestion(question.id)">删除</button>
+							</view>
 						</view>
 					</view>
 				</view>
@@ -171,6 +238,8 @@ const bankForm = ref({ id: null, title: '', description: '', is_public: false })
 const bankSaving = ref(false)
 const questionLoading = ref(false)
 const questions = ref([])
+const questionPage = ref(1)
+const questionTotal = ref(0)
 const selectedBankId = ref(null)
 const creatingQuestion = ref(false)
 const savingQuestionId = ref(null)
@@ -179,9 +248,11 @@ const importDir = ref('')
 const importRecursive = ref(true)
 const importLoading = ref(false)
 const importReport = ref(null)
+const QUESTION_PAGE_SIZE = 10
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
+  { label: '判断', value: 'choice_judgment' },
   { label: '多选', value: 'choice_multi' },
   { label: '简答', value: 'short_answer' },
 ]
@@ -201,6 +272,22 @@ const currentBankLabel = computed(() => {
   const found = banks.value.find((b) => b.id === selectedBankId.value)
   return found ? found.title : '选择题库'
 })
+
+const totalPages = computed(() => {
+  return questionTotal.value ? Math.ceil(questionTotal.value / QUESTION_PAGE_SIZE) : 1
+})
+
+const goToPage = (page) => {
+  if (page < 1 || page > totalPages.value) return
+  questionPage.value = page
+  loadQuestions()
+}
+
+const goPrevPage = () => goToPage(questionPage.value - 1)
+const goNextPage = () => goToPage(questionPage.value + 1)
+const goMerge = () => {
+  uni.navigateTo({ url: '/pages/manager/merge' })
+}
 
 onLoad(() => {
   if (!getToken()) {
@@ -262,6 +349,8 @@ const removeBank = async (bankId) => {
       if (selectedBankId.value === bankId) {
         selectedBankId.value = null
         questions.value = []
+        questionTotal.value = 0
+        questionPage.value = 1
       }
       await loadBanks()
     } catch (err) {
@@ -276,6 +365,7 @@ const loadBanks = async () => {
     banks.value = res || []
     if (!selectedBankId.value && banks.value.length) {
       selectedBankId.value = banks.value[0].id
+      questionPage.value = 1
       loadQuestions()
     }
   } catch (err) {
@@ -293,21 +383,37 @@ const onBankChange = (event) => {
 
 const selectBank = (bankId) => {
   selectedBankId.value = bankId
+  questionPage.value = 1
   loadQuestions()
 }
 
 const loadQuestions = async () => {
   if (!selectedBankId.value) {
     questions.value = []
+    questionTotal.value = 0
     return
   }
   questionLoading.value = true
   try {
-    const res = await fetchQuestions(selectedBankId.value)
-    questions.value = (res || []).map((q) => ({
+    const res = await fetchQuestions(selectedBankId.value, {
+      page: questionPage.value,
+      pageSize: QUESTION_PAGE_SIZE,
+    })
+    const items = Array.isArray(res) ? res : res?.items || []
+    questionTotal.value = res?.total ?? items.length
+    questionPage.value = res?.page ?? questionPage.value
+    questions.value = items.map((q) => ({
       ...q,
       options: q.options || [],
     }))
+    if (!questions.value.length && questionTotal.value > 0 && questionPage.value > 1) {
+      const lastPage = Math.max(1, Math.ceil(questionTotal.value / QUESTION_PAGE_SIZE))
+      if (lastPage !== questionPage.value) {
+        questionPage.value = lastPage
+        await loadQuestions()
+      }
+    }
+    expandedId.value = null
   } catch (err) {
     uni.showToast({ title: err.message || '题目加载失败', icon: 'none' })
   } finally {
@@ -330,13 +436,22 @@ const setQuestionType = (question, type) => {
   question.type = type
   if (type === 'short_answer') {
     question.options = []
+    question.standard_answer = ''
     return
   }
   if (!question.options || !question.options.length) {
-    question.options = [
-      { key: 'A', text: '' },
-      { key: 'B', text: '' },
-    ]
+    if (type === 'choice_judgment') {
+      question.options = [
+        { key: 'A', text: '正确' },
+        { key: 'B', text: '错误' },
+      ]
+      question.standard_answer = 'A'
+    } else {
+      question.options = [
+        { key: 'A', text: '' },
+        { key: 'B', text: '' },
+      ]
+    }
   }
 }
 
@@ -344,11 +459,21 @@ const setNewType = (type) => {
   newQuestion.value.type = type
   if (type === 'short_answer') {
     newQuestion.value.options = []
-  } else if (!newQuestion.value.options || !newQuestion.value.options.length) {
-    newQuestion.value.options = [
-      { key: 'A', text: '' },
-      { key: 'B', text: '' },
-    ]
+    return
+  }
+  if (!newQuestion.value.options || !newQuestion.value.options.length) {
+    if (type === 'choice_judgment') {
+      newQuestion.value.options = [
+        { key: 'A', text: '正确' },
+        { key: 'B', text: '错误' },
+      ]
+      newQuestion.value.standard_answer = 'A'
+    } else {
+      newQuestion.value.options = [
+        { key: 'A', text: '' },
+        { key: 'B', text: '' },
+      ]
+    }
   }
 }
 
@@ -361,9 +486,19 @@ const createQuestion = async () => {
   }
   creatingQuestion.value = true
   try {
-    await saveManualQuestion({ ...newQuestion.value, bank_id: selectedBankId.value })
+    const payload = {
+      ...newQuestion.value,
+      bank_id: selectedBankId.value,
+      options: newQuestion.value.type === 'short_answer' ? [] : newQuestion.value.options,
+      standard_answer:
+        newQuestion.value.type === 'choice_multi'
+          ? (newQuestion.value.standard_answer || '').split(',').map((s) => s.trim()).filter(Boolean).join(',')
+          : newQuestion.value.standard_answer,
+    }
+    await saveManualQuestion(payload)
     uni.showToast({ title: '题目已添加', icon: 'success' })
     resetNewQuestion()
+    questionPage.value = 1
     await loadQuestions()
   } catch (err) {
     uni.showToast({ title: err.message || '添加失败', icon: 'none' })
@@ -396,7 +531,10 @@ const saveQuestion = async (question) => {
       type: question.type,
       content: question.content,
       options: question.type === 'short_answer' ? [] : question.options,
-      standard_answer: question.standard_answer,
+      standard_answer:
+        question.type === 'choice_multi'
+          ? (question.standard_answer || '').split(',').map((s) => s.trim()).filter(Boolean).join(',')
+          : question.standard_answer,
       analysis: question.analysis,
     }
     await updateQuestionApi(question.id, payload)
@@ -436,6 +574,32 @@ const truncate = (text, len = 60) => {
   return text.length > len ? `${text.slice(0, len)}...` : text
 }
 
+const setSingleAnswer = (target, key) => {
+  target.standard_answer = key
+}
+
+const toggleMultiAnswer = (target, key) => {
+  const existing = (target.standard_answer || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const idx = existing.indexOf(key)
+  if (idx >= 0) {
+    existing.splice(idx, 1)
+  } else {
+    existing.push(key)
+  }
+  target.standard_answer = existing.join(',')
+}
+
+const isMultiChecked = (target, key) => {
+  return (target.standard_answer || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .includes(key)
+}
+
 const runBatchImport = async () => {
   if (!selectedBankId.value) {
     return uni.showToast({ title: '请先选择题库', icon: 'none' })
@@ -444,20 +608,22 @@ const runBatchImport = async () => {
     return uni.showToast({ title: '请输入目录路径', icon: 'none' })
   }
   importLoading.value = true
-  try {
-    const res = await batchImportQuestions({
-      bank_id: selectedBankId.value,
-      directory: importDir.value,
-      recursive: importRecursive.value,
+  // fire-and-forget: 发送后端立即返回，不等待全量结果
+  batchImportQuestions({
+    bank_id: selectedBankId.value,
+    directory: importDir.value,
+    recursive: importRecursive.value,
+  })
+    .then(() => {
+      uni.showToast({ title: '已提交导入任务，稍后刷新', icon: 'none' })
+      loadQuestions()
     })
-    importReport.value = res
-    uni.showToast({ title: '批量导入完成', icon: 'success' })
-    await loadQuestions()
-  } catch (err) {
-    uni.showToast({ title: err.message || '导入失败', icon: 'none' })
-  } finally {
-    importLoading.value = false
-  }
+    .catch((err) => {
+      uni.showToast({ title: err.message || '导入失败', icon: 'none' })
+    })
+    .finally(() => {
+      importLoading.value = false
+    })
 }
 </script>
 
@@ -486,6 +652,11 @@ const runBatchImport = async () => {
 	align-items: center;
 }
 
+.header-actions {
+	display: flex;
+	gap: 12rpx;
+}
+
 .eyebrow {
 	font-size: 22rpx;
 	color: #94a3b8;
@@ -505,6 +676,35 @@ const runBatchImport = async () => {
 	display: flex;
 	flex-direction: column;
 	gap: 10rpx;
+}
+
+.chips {
+	display: flex;
+	gap: 10rpx;
+	flex-wrap: wrap;
+}
+
+.chip {
+	padding: 8rpx 14rpx;
+	border-radius: 12rpx;
+	border: 1rpx solid #cbd5e1;
+	color: #0f172a;
+	background: #f8fafc;
+	transition: all 0.2s ease;
+	display: flex;
+	align-items: center;
+	gap: 6rpx;
+}
+
+.chip-active {
+	background: #0ea5e9;
+	color: #ffffff;
+	border-color: #0ea5e9;
+	box-shadow: 0 4rpx 12rpx rgba(14, 165, 233, 0.25);
+}
+
+.chip-text {
+	display: inline-block;
 }
 
 .import-report {
@@ -613,6 +813,18 @@ const runBatchImport = async () => {
 	display: flex;
 	flex-direction: column;
 	gap: 12rpx;
+}
+
+.pagination {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 10rpx 0;
+}
+
+.pager-text {
+	font-size: 24rpx;
+	color: #475569;
 }
 
 .question-card {

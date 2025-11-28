@@ -1,10 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import delete
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, require_admin
 from app.db import get_session
 from app.models import schemas
-from app.models.db_models import Bank, FavoriteBank, User
+from app.models.db_models import (
+    Bank,
+    FavoriteBank,
+    FavoriteQuestion,
+    Question,
+    StudySession,
+    User,
+    WrongRecord,
+)
 
 router = APIRouter(redirect_slashes=False)
 
@@ -124,6 +133,74 @@ async def delete_bank(
     bank = session.get(Bank, bank_id)
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
+    # delete dependent records: favorites (bank/questions), wrong records, study sessions, questions
+    # remove study sessions first to avoid FK constraint on bank_id
+    session.exec(delete(StudySession).where(StudySession.bank_id == bank_id))
+
+    question_ids = [
+        q.id for q in session.exec(select(Question).where(Question.bank_id == bank_id)).all() if q.id
+    ]
+    if question_ids:
+        session.exec(delete(FavoriteQuestion).where(FavoriteQuestion.question_id.in_(question_ids)))
+        session.exec(delete(WrongRecord).where(WrongRecord.question_id.in_(question_ids)))
+        session.exec(delete(Question).where(Question.id.in_(question_ids)))
+
+    session.exec(delete(FavoriteBank).where(FavoriteBank.bank_id == bank_id))
+
     session.delete(bank)
     session.commit()
     return None
+
+
+@router.post("/merge", response_model=schemas.BankMergeResponse, status_code=201)
+async def merge_banks(
+    payload: schemas.BankMergeRequest,
+    session: Session = Depends(get_session),
+    admin: User = Depends(require_admin),
+) -> schemas.BankMergeResponse:
+    source_ids = list(dict.fromkeys(payload.source_bank_ids))
+    if len(source_ids) < 2:
+        raise HTTPException(status_code=400, detail="请选择至少两个要合并的题库")
+    banks = session.exec(select(Bank).where(Bank.id.in_(source_ids))).all()
+    found_ids = {b.id for b in banks if b.id is not None}
+    missing = [bid for bid in source_ids if bid not in found_ids]
+    if missing:
+        raise HTTPException(status_code=404, detail=f"题库不存在: {missing}")
+
+    new_bank = Bank(
+        title=payload.title,
+        description=payload.description,
+        is_public=payload.is_public,
+        created_by=admin.id,
+    )
+    session.add(new_bank)
+    session.commit()
+    session.refresh(new_bank)
+
+    merged_count = 0
+    for bank_id in source_ids:
+        questions = session.exec(select(Question).where(Question.bank_id == bank_id)).all()
+        for q in questions:
+            cloned_options = []
+            for opt in q.options or []:
+                if isinstance(opt, dict):
+                    cloned_options.append({**opt})
+                else:
+                    cloned_options.append(opt)
+            new_question = Question(
+                bank_id=new_bank.id,
+                type=q.type,
+                content=q.content,
+                options=cloned_options,
+                standard_answer=q.standard_answer,
+                analysis=q.analysis,
+            )
+            session.add(new_question)
+            merged_count += 1
+    session.commit()
+
+    return schemas.BankMergeResponse(
+        bank=_to_schema(new_bank),
+        merged_questions=merged_count,
+        source_bank_ids=source_ids,
+    )

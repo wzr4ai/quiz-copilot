@@ -46,17 +46,17 @@ class AIService:
             "只有在图片内容不是题目时，才根据材料创作 2-4 道题。"
             "输出必须是纯 JSON 数组，每个元素为题目对象，禁止返回任何额外文字或 Markdown 代码块。"
             "字段要求："
-            '1) type: "choice_single"（含判断题） 或 "choice_multi" 或 "short_answer"；'
-            "   判断题按单选处理，仅包含两个选项，例如 A=正确、B=错误；"
+            '1) type: "choice_single"、"choice_multi"、"choice_judgment" 或 "short_answer"；'
+            "   判断题使用 type=choice_judgment，选项仅 A=正确、B=错误；"
             "2) content: 题干文本；"
-            "3) options: choice_single/choice_multi 需提供 2-5 个选项数组，每项含 key(如 A/B/C/D) 与 text；"
+            "3) options: choice_single/choice_multi/judgment 需提供 2-5 个选项数组，每项含 key(如 A/B/C/D) 与 text；"
             "   short_answer 的 options 必须为空数组；"
-            "4) standard_answer: 单选/判断填正确选项字母；多选填多个正确选项字母，逗号分隔；"
+            "4) standard_answer: 单选/判断填正确选项字母；多选填多个正确选项字母，逗号或空格分隔；"
             "   简答题填写参考答案文本；"
             "5) analysis: 简要解析文本，可为空字符串。"
             "示例输出："
             '['
-            '{"type":"choice_single","content":"题干","options":[{"key":"A","text":"正确"},{"key":"B","text":"错误"}],"standard_answer":"A","analysis":"解析"},'
+            '{"type":"choice_judgment","content":"判断题干","options":[{"key":"A","text":"正确"},{"key":"B","text":"错误"}],"standard_answer":"A","analysis":"解析"},'
             '{"type":"choice_multi","content":"多选题干","options":[{"key":"A","text":"选项1"},{"key":"B","text":"选项2"}],"standard_answer":"A,B","analysis":""},'
             '{"type":"short_answer","content":"题干3","options":[],"standard_answer":"参考答案","analysis":""}'
             ']'

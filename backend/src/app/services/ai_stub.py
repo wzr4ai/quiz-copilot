@@ -33,7 +33,15 @@ def generate_questions_from_text(text: str, bank_id: int) -> list[QuestionCreate
         standard_answer="突出关键词与结论即可。",
         analysis="回答需包含材料中提到的关键要素与结论。",
     )
-    return [choice_question, short_answer]
+    judgment = QuestionCreate(
+        bank_id=bank_id,
+        type="choice_judgment",
+        content="判断：材料的核心论断与选项 A 一致。",
+        options=[Option(key="A", text="正确"), Option(key="B", text="错误")],
+        standard_answer="A",
+        analysis="示例判断题，用于演示独立的判断题类型。",
+    )
+    return [choice_question, judgment, short_answer]
 
 
 def generate_questions_from_image(image_base64: str, bank_id: int) -> list[QuestionCreate]:

@@ -19,6 +19,18 @@
 					<text class="action-label">收藏刷题</text>
 					<text class="action-desc">练收藏</text>
 				</view>
+				<view class="action" @click="toQuiz('', 'memorize')">
+					<text class="action-label">背题模式</text>
+					<text class="action-desc">顺序+解析</text>
+				</view>
+				<view class="action" @click="toQuiz('', 'memorize_wrong')">
+					<text class="action-label">背错题</text>
+					<text class="action-desc">顺序重练</text>
+				</view>
+				<view class="action" @click="toQuiz('', 'memorize_favorite')">
+					<text class="action-label">背收藏</text>
+					<text class="action-desc">顺序精刷</text>
+				</view>
 				<view v-if="isAdmin" class="action" @click="toEditor('text')">
 					<text class="action-label">文本导入</text>
 					<text class="action-desc">贴文本生成题</text>
@@ -26,6 +38,10 @@
 				<view v-if="isAdmin" class="action" @click="toEditor('image')">
 					<text class="action-label">拍照导入</text>
 					<text class="action-desc">识别试卷</text>
+				</view>
+				<view v-if="isAdmin" class="action alt" @click="toMerge">
+					<text class="action-label">合并题库</text>
+					<text class="action-desc">整合题库</text>
 				</view>
 				<view class="action" @click="toQuiz('', 'wrong')">
 					<text class="action-label">错题重练</text>
@@ -106,6 +122,10 @@ const toEditor = (mode) => {
 
 const toManager = () => {
   uni.navigateTo({ url: '/pages/manager/index' })
+}
+
+const toMerge = () => {
+  uni.navigateTo({ url: '/pages/manager/merge' })
 }
 
 const toProfile = () => {

@@ -68,14 +68,19 @@ export const createBank = (payload) => request('/banks', { method: 'POST', data:
 export const updateBank = (bankId, payload) =>
   request(`/banks/${bankId}`, { method: 'PUT', data: payload })
 export const deleteBank = (bankId) => request(`/banks/${bankId}`, { method: 'DELETE' })
+export const mergeBanks = (payload) => request('/banks/merge', { method: 'POST', data: payload })
 export const aiTextToQuiz = (payload) => request('/questions/ai/text-to-quiz', { method: 'POST', data: payload })
 export const aiImageToQuiz = (payload) => request('/questions/ai/image-to-quiz', { method: 'POST', data: payload })
 export const saveManualQuestion = (payload) => request('/questions/manual', { method: 'POST', data: payload })
 export const updateQuestionApi = (questionId, payload) =>
   request(`/questions/${questionId}`, { method: 'PUT', data: payload })
 export const deleteQuestion = (questionId) => request(`/questions/${questionId}`, { method: 'DELETE' })
-export const fetchQuestions = (bankId) =>
-  request(`/questions${bankId ? `?bank_id=${bankId}` : ''}`)
+export const fetchQuestions = (bankId, { page = 1, pageSize = 10 } = {}) => {
+  if (!bankId) {
+    return Promise.reject(new Error('缺少题库 ID'))
+  }
+  return request(`/questions?bank_id=${bankId}&page=${page}&page_size=${pageSize}`)
+}
 export const batchImportQuestions = (payload) =>
   request('/questions/ai/batch-import', { method: 'POST', data: payload })
 export const fetchFavoriteQuestions = () => request('/questions/favorites')
@@ -87,3 +92,5 @@ export const startSession = (bankId, mode = 'random') =>
   request(`/study/session/start?${bankId ? `bank_id=${bankId}&` : ''}mode=${mode}`)
 export const submitSession = (payload) => request('/study/submit', { method: 'POST', data: payload })
 export const listWrongQuestions = () => request('/study/wrong')
+export const recordAnswer = (questionId, answer) =>
+  request('/study/record', { method: 'POST', data: { question_id: questionId, answer } })

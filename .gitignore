@@ -49,6 +49,7 @@ unpackage/
 *.swo
 *.tmp
 *.orig
+*.log
 .DS_Store
 Thumbs.db
 
@@ -58,3 +59,4 @@ backend/utils/docker/*.local.yml
 backend/utils/docker/data/
 backend/utils/docker/tmp/
 backend/utils/docker/logs/
+

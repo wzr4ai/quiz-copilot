@@ -79,7 +79,7 @@
 					<textarea v-model="question.content" class="textarea small" placeholder="输入题干" />
 				</view>
 
-				<view v-if="question.type === 'choice_single'" class="row">
+				<view v-if="question.type !== 'short_answer'" class="row">
 					<text class="label">选项</text>
 					<view class="options">
 						<view v-for="(opt, oIdx) in question.options" :key="oIdx" class="option">
@@ -135,6 +135,7 @@ const LAST_BANK_KEY = 'last_import_bank_id'
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
+  { label: '判断', value: 'choice_judgment' },
   { label: '多选', value: 'choice_multi' },
   { label: '简答', value: 'short_answer' },
 ]
@@ -340,10 +341,18 @@ const setQuestionType = (question, type) => {
     return
   }
   if (!question.options || !question.options.length) {
-    question.options = [
-      { key: 'A', text: '' },
-      { key: 'B', text: '' },
-    ]
+    if (type === 'choice_judgment') {
+      question.options = [
+        { key: 'A', text: '正确' },
+        { key: 'B', text: '错误' },
+      ]
+      question.standard_answer = 'A'
+    } else {
+      question.options = [
+        { key: 'A', text: '' },
+        { key: 'B', text: '' },
+      ]
+    }
   }
 }
 

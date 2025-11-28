@@ -31,6 +31,12 @@
       }
     },
     {
+      "path": "pages/manager/merge",
+      "style": {
+        "navigationBarTitleText": "合并题库"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "我的"

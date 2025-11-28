@@ -38,7 +38,7 @@
 			</view>
 			<text class="question-content">{{ currentQuestion.content }}</text>
 
-			<view v-if="currentQuestion.type === 'choice_single'" class="options">
+			<view v-if="['choice_single', 'choice_judgment'].includes(currentQuestion.type)" class="options">
 				<view
 					v-for="opt in currentQuestion.options"
 					:key="opt.key"
@@ -62,7 +62,10 @@
 					<text class="opt-key">{{ opt.key }}</text>
 					<text class="opt-text">{{ opt.text }}</text>
 				</view>
-				<button class="ghost small" @click="confirmMulti">确认</button>
+				<button v-if="realtime" class="ghost small" @click="confirmMulti">确认</button>
+				<view v-if="isAdmin && multiSelections[currentQuestion.id]?.length" class="admin-hint">
+					<text class="hint">当前选择：{{ (multiSelections[currentQuestion.id] || []).join(',') }}</text>
+				</view>
 			</view>
 
 			<view v-else class="textarea-wrap">
@@ -70,6 +73,7 @@
 					v-model="answers[currentQuestion.id]"
 					placeholder="输入你的答案..."
 					class="textarea"
+					@input="(e) => onTextInput(currentQuestion.id, e.detail.value)"
 				/>
 			</view>
 
@@ -117,6 +121,7 @@ import {
   fetchFavoriteQuestions,
   getRole,
   getToken,
+  recordAnswer,
   startSession,
   submitSession,
   unfavoriteQuestion,
@@ -149,12 +154,17 @@ const feedback = reactive({})
 const isFavorited = ref(false)
 const role = ref(getRole() || '')
 const isAdmin = computed(() => role.value === 'admin')
+const isMemorize = computed(() => mode.value.startsWith('memorize'))
 
 const currentQuestion = computed(() => questions.value[currentIndex.value])
 
 const modeLabel = computed(() => {
   if (mode.value === 'wrong') return '错题重练'
+  if (mode.value === 'favorite') return '收藏刷题'
   if (mode.value === 'ordered') return '顺序'
+  if (mode.value === 'memorize') return '背题（顺序）'
+  if (mode.value === 'memorize_wrong') return '背题（错题）'
+  if (mode.value === 'memorize_favorite') return '背题（收藏）'
   return '随机'
 })
 
@@ -165,6 +175,8 @@ const currentBankLabel = computed(() => {
 
 const typeLabel = (type) => {
   if (type === 'choice_single') return '单选题'
+  if (type === 'choice_judgment') return '判断题'
+  if (type === 'choice_multi') return '多选题'
   if (type === 'short_answer') return '简答题'
   return type
 }
@@ -187,7 +199,10 @@ const initSession = async () => {
   if (!getToken()) {
     return uni.showToast({ title: '请先登录', icon: 'none' })
   }
-  if (mode.value !== 'favorite' && !bankId.value) {
+  const requiresBank =
+    (!isMemorize.value && mode.value !== 'favorite') ||
+    (isMemorize.value && !mode.value.includes('wrong') && !mode.value.includes('favorite'))
+  if (requiresBank && !bankId.value) {
     return uni.showToast({ title: '请先选择题库', icon: 'none' })
   }
   loading.value = true
@@ -195,7 +210,13 @@ const initSession = async () => {
     const res = await startSession(mode.value === 'favorite' ? '' : bankId.value, mode.value)
     sessionId.value = res.session_id
     questions.value = res.questions || []
-    currentIndex.value = 0
+    const savedIdx = getMemorizeIndex()
+    currentIndex.value = isMemorize.value ? Math.min(savedIdx, Math.max(questions.value.length - 1, 0)) : 0
+    if (isMemorize.value) {
+      realtime.value = true
+    } else {
+      realtime.value = false
+    }
     Object.keys(answers).forEach((key) => delete answers[key])
     Object.keys(multiSelections).forEach((key) => delete multiSelections[key])
     feedbackClear()
@@ -205,6 +226,14 @@ const initSession = async () => {
         multiSelections[q.id] = []
       }
     })
+    if (isMemorize.value) {
+      loadMemorizeState()
+    }
+    if (realtime.value) {
+      questions.value.forEach((q) => {
+        if (answers[q.id]) showFeedback(q.id)
+      })
+    }
     syncFavoriteStatus()
   } catch (err) {
     uni.showToast({ title: err.message || '加载题目失败', icon: 'none' })
@@ -217,6 +246,9 @@ onLoad((options) => {
   bankId.value = options && options.bankId ? Number(options.bankId) : ''
   mode.value = (options && options.mode) || 'random'
   role.value = getRole() || ''
+  if (isMemorize.value) {
+    realtime.value = true
+  }
   loadBanks().then(() => initSession())
 })
 
@@ -232,6 +264,7 @@ const onBankChange = (event) => {
 
 const selectOption = (questionId, value) => {
   answers[questionId] = value
+  if (isMemorize.value) saveMemorizeState()
   if (realtime.value) {
     showFeedback(questionId)
   }
@@ -250,7 +283,8 @@ const toggleMulti = (questionId, value) => {
 const confirmMulti = () => {
   const q = currentQuestion.value
   if (!q) return
-  answers[q.id] = (multiSelections[q.id] || []).join(',')
+  answers[q.id] = normalizeMultiAnswer(multiSelections[q.id])
+  if (isMemorize.value) saveMemorizeState()
   if (realtime.value) {
     showFeedback(q.id)
   } else {
@@ -258,10 +292,27 @@ const confirmMulti = () => {
   }
 }
 
+const recordCurrentAnswer = async () => {
+  const q = currentQuestion.value
+  if (!q) return
+  if (q.type === 'choice_multi' && !answers[q.id]) {
+    answers[q.id] = normalizeMultiAnswer(multiSelections[q.id])
+  }
+  const ans = answers[q.id]
+  if (!ans) return
+  try {
+    await recordAnswer(q.id, ans)
+  } catch (err) {
+    // silently ignore to not block navigation, but can toast for debugging
+  }
+}
+
 const next = async () => {
+  await recordCurrentAnswer()
   if (currentIndex.value < questions.value.length - 1) {
     currentIndex.value += 1
     isFavorited.value = !!questions.value[currentIndex.value]?.is_favorited
+    if (isMemorize.value) saveMemorizeIndex()
     return
   }
   await submit()
@@ -284,7 +335,10 @@ const submit = async () => {
       session_id: sessionId.value,
       answers: questions.value.map((q) => ({
         question_id: q.id,
-        answer: answers[q.id] || '',
+        answer:
+          q.type === 'choice_multi'
+            ? normalizeMultiAnswer(answers[q.id] || multiSelections[q.id])
+            : answers[q.id] || '',
       })),
     }
     const res = await submitSession(payload)
@@ -305,6 +359,7 @@ const prev = () => {
   if (currentIndex.value > 0) {
     currentIndex.value -= 1
     isFavorited.value = !!questions.value[currentIndex.value]?.is_favorited
+    if (isMemorize.value) saveMemorizeIndex()
   }
 }
 
@@ -351,11 +406,14 @@ const showFeedback = (questionId) => {
   if (!q) return
   const userAns = (answers[questionId] || '').trim()
   const correct = (q.standard_answer || '').trim()
-  const normalizedUser = q.type === 'choice_multi' ? userAns.split(',').map((s) => s.trim()).filter(Boolean).sort().join(',') : userAns.toLowerCase()
-  const normalizedCorrect =
-    q.type === 'choice_multi'
-      ? correct.split(',').map((s) => s.trim()).filter(Boolean).sort().join(',')
-      : correct.toLowerCase()
+  const normalize = (val, multi) => {
+    if (multi) {
+      return normalizeMultiAnswer(val.split(','))
+    }
+    return val.toUpperCase()
+  }
+  const normalizedUser = normalize(userAns, q.type === 'choice_multi')
+  const normalizedCorrect = normalize(correct, q.type === 'choice_multi')
   feedback[questionId] = {
     correct: normalizedUser === normalizedCorrect && normalizedUser !== '',
     correctAnswer: correct || '未提供',
@@ -369,6 +427,82 @@ const feedbackClear = () => {
 
 const onRealtimeChange = (e) => {
   realtime.value = !!(e?.detail?.value)
+}
+
+const onTextInput = (questionId, value) => {
+  answers[questionId] = value
+  if (isMemorize.value) saveMemorizeState()
+}
+
+const normalizeMultiAnswer = (vals) => {
+  if (!vals) return ''
+  const arr = Array.isArray(vals) ? vals : String(vals).split(',')
+  return arr
+    .join(',') // unify to comma string
+    .replace(/\s+/g, ',') // replace spaces with commas
+    .split(',')
+    .map((s) => s.toString().trim().toUpperCase())
+    .filter(Boolean)
+    .sort()
+    .join(',')
+}
+
+const MEMO_STATE_KEY = 'memorize_state'
+const memorizeKey = () =>
+  `${mode.value}:${mode.value.includes('favorite') ? 'all' : bankId.value || 'all'}`
+
+const saveMemorizeState = () => {
+  if (!isMemorize.value) return
+  const data = uni.getStorageSync(MEMO_STATE_KEY) || {}
+  const answersCopy = {}
+  Object.keys(answers).forEach((k) => {
+    answersCopy[k] = answers[k]
+  })
+  const multiCopy = {}
+  Object.keys(multiSelections).forEach((k) => {
+    multiCopy[k] = [...(multiSelections[k] || [])]
+  })
+  data[memorizeKey()] = {
+    index: currentIndex.value,
+    answers: answersCopy,
+    multi: multiCopy,
+  }
+  uni.setStorageSync(MEMO_STATE_KEY, data)
+}
+
+const loadMemorizeState = () => {
+  if (!isMemorize.value) return
+  const data = uni.getStorageSync(MEMO_STATE_KEY) || {}
+  const state = data[memorizeKey()]
+  if (!state) return
+  if (typeof state.index === 'number') {
+    currentIndex.value = Math.min(state.index, Math.max(questions.value.length - 1, 0))
+  }
+  if (state.answers) {
+    Object.keys(state.answers).forEach((k) => {
+      answers[k] = state.answers[k]
+    })
+  }
+  if (state.multi) {
+    Object.keys(state.multi).forEach((k) => {
+      multiSelections[k] = state.multi[k]
+    })
+  }
+}
+
+const MEMO_PROGRESS_KEY = 'memorize_progress'
+const saveMemorizeIndex = () => {
+  if (!isMemorize.value) return
+  const data = uni.getStorageSync(MEMO_PROGRESS_KEY) || {}
+  data[memorizeKey()] = currentIndex.value
+  uni.setStorageSync(MEMO_PROGRESS_KEY, data)
+}
+
+const getMemorizeIndex = () => {
+  if (!isMemorize.value) return 0
+  const data = uni.getStorageSync(MEMO_PROGRESS_KEY) || {}
+  const val = data[memorizeKey()]
+  return typeof val === 'number' ? val : 0
 }
 
 const toggleFavorite = async () => {
@@ -393,6 +527,7 @@ const syncFavoriteStatus = () => {
   const current = questions.value[currentIndex.value]
   isFavorited.value = !!current?.is_favorited
 }
+
 </script>
 
 <style>
@@ -541,6 +676,11 @@ const syncFavoriteStatus = () => {
 	display: flex;
 	flex-direction: column;
 	gap: 6rpx;
+}
+
+.admin-hint .hint {
+	color: #b45309;
+	font-size: 24rpx;
 }
 
 .status {

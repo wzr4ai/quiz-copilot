@@ -1,20 +1,15 @@
 import random
 from collections import defaultdict
 
+from collections import defaultdict
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user
 from app.db import get_session
 from app.models import schemas
-from app.models.db_models import (
-    Bank,
-    FavoriteQuestion,
-    Question as QuestionDB,
-    StudySession,
-    User,
-    WrongRecord,
-)
+from app.models.db_models import Bank, FavoriteQuestion, Question as QuestionDB, StudySession, User, WrongRecord
 
 router = APIRouter(redirect_slashes=False)
 
@@ -43,18 +38,128 @@ def _to_question(q: QuestionDB) -> schemas.Question:
     )
 
 
+def _wrong_question_ids(session: Session, user_id: int) -> set[int]:
+    records = (
+        session.exec(
+            select(WrongRecord)
+            .where(WrongRecord.user_id == user_id)
+            .order_by(WrongRecord.question_id, WrongRecord.created_at.desc())
+        ).all()
+    )
+    grouped: dict[int, list[WrongRecord]] = defaultdict(list)
+    for rec in records:
+        grouped[rec.question_id].append(rec)
+
+    wrong_ids: set[int] = set()
+    for qid, recs in grouped.items():
+        consecutive_correct = 0
+        ever_wrong = False
+        for rec in recs:
+            if rec.is_correct:
+                consecutive_correct += 1
+            else:
+                ever_wrong = True
+                break
+        if ever_wrong:
+            if consecutive_correct < 3:
+                wrong_ids.add(qid)
+    return wrong_ids
+
+
+def _collect_wrong_summaries(session: Session, user_id: int) -> list[schemas.WrongQuestionSummary]:
+    records = (
+        session.exec(
+            select(WrongRecord)
+            .where(WrongRecord.user_id == user_id)
+            .order_by(WrongRecord.question_id, WrongRecord.created_at.desc())
+        ).all()
+    )
+    latest: dict[int, WrongRecord] = {}
+    for rec in records:
+        if rec.question_id not in latest:
+            latest[rec.question_id] = rec
+
+    wrong_ids = _wrong_question_ids(session, user_id)
+    summaries: list[schemas.WrongQuestionSummary] = []
+    for qid in wrong_ids:
+        record = latest.get(qid)
+        question = session.get(QuestionDB, qid)
+        if not question or not record:
+            continue
+        summaries.append(
+            schemas.WrongQuestionSummary(
+                question=_to_question(question),
+                user_answer=record.user_answer,
+                correct_answer=record.correct_answer,
+                created_at=record.created_at,
+            )
+        )
+    return summaries
+
+
+@router.post("/record", response_model=dict)
+async def record_answer(
+    payload: schemas.SubmitAnswer,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    question = session.get(QuestionDB, payload.question_id)
+    if question is None:
+        raise HTTPException(status_code=404, detail="Question not found")
+
+    raw_answer = payload.answer.strip()
+    normalized_answer = _normalize_answer(raw_answer, question.type)
+    normalized_standard = _normalize_answer(question.standard_answer.strip(), question.type)
+    is_correct = normalized_answer == normalized_standard and normalized_standard != ""
+
+    record = WrongRecord(
+        user_id=current_user.id,
+        question_id=question.id,
+        user_answer=raw_answer,
+        correct_answer=question.standard_answer.strip(),
+        is_correct=is_correct,
+    )
+    session.add(record)
+    session.commit()
+
+    return {"is_correct": is_correct}
+
+
+def _normalize_answer(val: str, qtype: str) -> str:
+    if qtype == "choice_multi":
+        parts = [p.strip().upper() for p in val.replace(" ", ",").split(",") if p.strip()]
+        parts.sort()
+        return ",".join(parts)
+    return val.strip().upper()
+
+
 @router.get("/session/start", response_model=schemas.StartSessionResponse)
 async def start_session(
     bank_id: int | None = Query(None, description="题库 ID"),
-    mode: str = Query("random", description="练习模式：random / ordered / wrong / favorite"),
+    mode: str = Query(
+        "random", description="练习模式：random / ordered / wrong / favorite / memorize*"
+    ),
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> schemas.StartSessionResponse:
-    if mode != "favorite":
-        if bank_id is None:
+    selection_mode = mode
+    is_memorize = mode.startswith("memorize")
+    if is_memorize:
+        if "wrong" in mode:
+            selection_mode = "wrong"
+        elif "favorite" in mode:
+            selection_mode = "favorite"
+        else:
+            selection_mode = "ordered"
+
+    if selection_mode != "favorite":
+        if bank_id is None and selection_mode != "wrong":
             raise HTTPException(status_code=400, detail="bank_id is required for this mode")
-        _ensure_bank(session, bank_id)
-        query = select(QuestionDB).where(QuestionDB.bank_id == bank_id)
+        if bank_id is not None:
+            _ensure_bank(session, bank_id)
+        query = select(QuestionDB)
+        if bank_id is not None:
+            query = query.where(QuestionDB.bank_id == bank_id)
         questions = session.exec(query).all()
     else:
         fav_query = select(QuestionDB).join(FavoriteQuestion, FavoriteQuestion.question_id == QuestionDB.id).where(
@@ -64,16 +169,11 @@ async def start_session(
             fav_query = fav_query.where(QuestionDB.bank_id == bank_id)
         questions = session.exec(fav_query).all()
 
-    if mode == "wrong":
-        wrong_ids = {
-            rec.question_id
-            for rec in session.exec(
-                select(WrongRecord).where(WrongRecord.user_id == current_user.id, WrongRecord.is_correct.is_(False))
-            ).all()
-        }
+    if selection_mode == "wrong":
+        wrong_ids = _wrong_question_ids(session, current_user.id)
         questions = [q for q in questions if q.id in wrong_ids]
 
-    if mode == "random":
+    if selection_mode == "random":
         random.shuffle(questions)
     else:
         questions.sort(key=lambda x: x.id)
@@ -105,7 +205,6 @@ async def submit(
     current_user: User = Depends(get_current_user),
 ) -> schemas.SubmitResult:
     correct_count = 0
-    wrong_items: list[schemas.WrongQuestionSummary] = []
 
     answers_payload = []
     bank_id = None
@@ -114,30 +213,28 @@ async def submit(
         if question is None:
             raise HTTPException(status_code=404, detail=f"Question {answer.question_id} not found")
         bank_id = bank_id or question.bank_id
-        normalized_answer = answer.answer.strip()
-        normalized_standard = question.standard_answer.strip()
-        is_correct = normalized_answer.lower() == normalized_standard.lower()
+        raw_answer = answer.answer.strip()
+        raw_standard = question.standard_answer.strip()
+
+        normalized_answer = _normalize_answer(raw_answer, question.type)
+        normalized_standard = _normalize_answer(raw_standard, question.type)
+        is_correct = normalized_answer == normalized_standard and normalized_standard != ""
         if is_correct:
             correct_count += 1
 
         record = WrongRecord(
             user_id=current_user.id,
             question_id=question.id,
-            user_answer=normalized_answer,
-            correct_answer=question.standard_answer,
+            user_answer=raw_answer,
+            correct_answer=raw_standard,
             is_correct=is_correct,
         )
         session.add(record)
-        if not is_correct:
-            wrong_items.append(
-                schemas.WrongQuestionSummary(
-                    question=_to_question(question),
-                    user_answer=normalized_answer,
-                    correct_answer=question.standard_answer,
-                    created_at=record.created_at,
-                )
-            )
         answers_payload.append(record)
+
+    # persist streak logic via wrong records evaluation
+    session.commit()
+    wrong_items = _collect_wrong_summaries(session, current_user.id)
 
     total = len(payload.answers)
     score = round((correct_count / total) * 100) if total else 0
@@ -160,6 +257,8 @@ async def submit(
     )
     session.commit()
 
+    wrong_items = _collect_wrong_summaries(session, current_user.id)
+
     return schemas.SubmitResult(
         correct_count=correct_count,
         total=total,
@@ -173,22 +272,4 @@ async def list_wrong_questions(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[schemas.WrongQuestionSummary]:
-    records = session.exec(select(WrongRecord).where(WrongRecord.user_id == current_user.id)).all()
-    latest: dict[int, WrongRecord] = {}
-    for record in records:
-        latest[record.question_id] = record
-
-    summaries: list[schemas.WrongQuestionSummary] = []
-    for record in latest.values():
-        question = session.get(QuestionDB, record.question_id)
-        if not question or record.is_correct:
-            continue
-        summaries.append(
-            schemas.WrongQuestionSummary(
-                question=_to_question(question),
-                user_answer=record.user_answer,
-                correct_answer=record.correct_answer,
-                created_at=record.created_at,
-            )
-        )
-    return summaries
+    return _collect_wrong_summaries(session, current_user.id)
