@@ -14,10 +14,12 @@ from app.models.db_models import Bank, FavoriteQuestion, Question as QuestionDB,
 router = APIRouter(redirect_slashes=False)
 
 
-def _ensure_bank(session: Session, bank_id: int) -> None:
+def _ensure_bank_readable(session: Session, bank_id: int, user: User) -> None:
     bank = session.get(Bank, bank_id)
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
+    if user.role != "admin" and not bank.is_public:
+        raise HTTPException(status_code=403, detail="无权访问非公开题库")
 
 
 def _to_study_question(q: QuestionDB) -> schemas.StudyQuestion:
@@ -106,6 +108,7 @@ async def record_answer(
     question = session.get(QuestionDB, payload.question_id)
     if question is None:
         raise HTTPException(status_code=404, detail="Question not found")
+    _ensure_bank_readable(session, question.bank_id, current_user)
 
     raw_answer = payload.answer.strip()
     normalized_answer = _normalize_answer(raw_answer, question.type)
@@ -156,10 +159,12 @@ async def start_session(
         if bank_id is None and selection_mode != "wrong":
             raise HTTPException(status_code=400, detail="bank_id is required for this mode")
         if bank_id is not None:
-            _ensure_bank(session, bank_id)
+            _ensure_bank_readable(session, bank_id, current_user)
         query = select(QuestionDB)
         if bank_id is not None:
             query = query.where(QuestionDB.bank_id == bank_id)
+        if current_user.role != "admin":
+            query = query.join(Bank, Bank.id == QuestionDB.bank_id).where(Bank.is_public.is_(True))
         questions = session.exec(query).all()
     else:
         fav_query = select(QuestionDB).join(FavoriteQuestion, FavoriteQuestion.question_id == QuestionDB.id).where(
@@ -167,6 +172,8 @@ async def start_session(
         )
         if bank_id:
             fav_query = fav_query.where(QuestionDB.bank_id == bank_id)
+        if current_user.role != "admin":
+            fav_query = fav_query.join(Bank, Bank.id == QuestionDB.bank_id).where(Bank.is_public.is_(True))
         questions = session.exec(fav_query).all()
 
     if selection_mode == "wrong":
@@ -212,6 +219,7 @@ async def submit(
         question = session.get(QuestionDB, answer.question_id)
         if question is None:
             raise HTTPException(status_code=404, detail=f"Question {answer.question_id} not found")
+        _ensure_bank_readable(session, question.bank_id, current_user)
         bank_id = bank_id or question.bank_id
         raw_answer = answer.answer.strip()
         raw_standard = question.standard_answer.strip()

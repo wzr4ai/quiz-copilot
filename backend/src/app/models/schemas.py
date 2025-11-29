@@ -157,3 +157,21 @@ class WrongRecord(BaseModel):
     correct_answer: str
     is_correct: bool
     created_at: datetime
+
+
+class QuestionIssue(BaseModel):
+    id: int
+    question_id: int
+    bank_id: int
+    reason: str
+    status: str
+    created_at: datetime
+
+
+class QuestionIssueUpdate(BaseModel):
+    status: str
+    reason: Optional[str] = None
+
+
+class QuestionIssueWithQuestion(QuestionIssue):
+    question: Question

@@ -27,12 +27,20 @@ def _to_schema(bank: Bank) -> schemas.Bank:
     )
 
 
+def _ensure_readable(bank: Bank, user: User) -> None:
+    if user.role != "admin" and not bank.is_public:
+        raise HTTPException(status_code=403, detail="无权访问非公开题库")
+
+
 @router.get("/", response_model=list[schemas.Bank])
 async def list_banks(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[schemas.Bank]:
-    banks = session.exec(select(Bank)).all()
+    stmt = select(Bank)
+    if current_user.role != "admin":
+        stmt = stmt.where(Bank.is_public.is_(True))
+    banks = session.exec(stmt).all()
     return [_to_schema(b) for b in banks]
 
 
@@ -40,13 +48,14 @@ async def list_banks(
 async def list_favorites(
     session: Session = Depends(get_session), current_user: User = Depends(get_current_user)
 ) -> list[schemas.Bank]:
-    joins = (
-        session.exec(
-            select(Bank)
-            .join(FavoriteBank, FavoriteBank.bank_id == Bank.id)
-            .where(FavoriteBank.user_id == current_user.id)
-        ).all()
+    stmt = (
+        select(Bank)
+        .join(FavoriteBank, FavoriteBank.bank_id == Bank.id)
+        .where(FavoriteBank.user_id == current_user.id)
     )
+    if current_user.role != "admin":
+        stmt = stmt.where(Bank.is_public.is_(True))
+    joins = session.exec(stmt).all()
     return [_to_schema(b) for b in joins]
 
 
@@ -59,6 +68,7 @@ async def add_favorite(
     bank = session.get(Bank, bank_id)
     if not bank:
         raise HTTPException(status_code=404, detail="Bank not found")
+    _ensure_readable(bank, current_user)
     exists = session.exec(
         select(FavoriteBank).where(
             FavoriteBank.user_id == current_user.id, FavoriteBank.bank_id == bank_id
@@ -81,6 +91,10 @@ async def remove_favorite(
             FavoriteBank.user_id == current_user.id, FavoriteBank.bank_id == bank_id
         )
     ).first()
+    if fav:
+        bank = session.get(Bank, bank_id)
+        if bank:
+            _ensure_readable(bank, current_user)
     if fav:
         session.delete(fav)
         session.commit()

@@ -37,6 +37,24 @@
       }
     },
     {
+      "path": "pages/manager/qid",
+      "style": {
+        "navigationBarTitleText": "题目编辑（ID）"
+      }
+    },
+    {
+      "path": "pages/manager/issues",
+      "style": {
+        "navigationBarTitleText": "疑似错题"
+      }
+    },
+    {
+      "path": "pages/manager/search",
+      "style": {
+        "navigationBarTitleText": "题目搜索（管理员）"
+      }
+    },
+    {
       "path": "pages/profile/index",
       "style": {
         "navigationBarTitleText": "我的"

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
@@ -27,9 +29,12 @@ class Settings(BaseSettings):
     )
     gemini_model: str = "gemini-2.5-flash"
     gemini_request_timeout: int = 40
+    zai_api_key: str | None = Field(default=None, validation_alias="ZAI_API_KEY")
+    zai_api_base: str | None = Field(default=None, validation_alias="ZAI_API_BASE")
+    zai_model: str | None = Field(default=None, validation_alias="ZAI_MODEL")
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).resolve().parents[3] / ".env")
         env_file_encoding = "utf-8"
 
 

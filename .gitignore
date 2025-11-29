@@ -59,4 +59,13 @@ backend/utils/docker/*.local.yml
 backend/utils/docker/data/
 backend/utils/docker/tmp/
 backend/utils/docker/logs/
+backend/Question_Bank_File/
+backend/processed_question_bank/
+backend/done/
 
+# doc files
+*.docx
+*.pdf
+*.pptx
+*.xlsx
+*.doc

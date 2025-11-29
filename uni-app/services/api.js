@@ -88,6 +88,12 @@ export const favoriteQuestion = (questionId) =>
   request(`/questions/${questionId}/favorite`, { method: 'POST' })
 export const unfavoriteQuestion = (questionId) =>
   request(`/questions/${questionId}/favorite`, { method: 'DELETE' })
+export const adminGetQuestionById = (questionId) => request(`/questions/admin/${questionId}`)
+export const adminFetchIssueQuestions = () => request('/questions/admin/issues')
+export const adminUpdateIssue = (issueId, payload) =>
+  request(`/questions/admin/issues/${issueId}`, { method: 'PATCH', data: payload })
+export const adminSearchQuestions = (keyword, limit = 50) =>
+  request(`/questions/admin/search?keyword=${encodeURIComponent(keyword)}&limit=${limit}`)
 export const startSession = (bankId, mode = 'random') =>
   request(`/study/session/start?${bankId ? `bank_id=${bankId}&` : ''}mode=${mode}`)
 export const submitSession = (payload) => request('/study/submit', { method: 'POST', data: payload })

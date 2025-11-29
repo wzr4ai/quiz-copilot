@@ -1,16 +1,17 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import Session, select
 
 from app.dependencies import get_current_user, require_admin
 from app.db import get_session
 from app.models import schemas
-from app.models.db_models import Bank, FavoriteQuestion, Question as QuestionDB, User
+from app.models.db_models import Bank, FavoriteQuestion, Question as QuestionDB, User, QuestionIssue
 from app.services.ai_service import AIServiceError, ai_service
 from app.services.ai_stub import generate_questions_from_text
 from app.services.batch_importer import BatchImportService
+from pathlib import Path
 
 router = APIRouter(redirect_slashes=False)
 logger = logging.getLogger(__name__)
@@ -77,6 +78,14 @@ def _ensure_bank(session: Session, bank_id: int) -> None:
         raise HTTPException(status_code=404, detail="Bank not found")
 
 
+def _ensure_bank_readable(session: Session, bank_id: int, user: User) -> None:
+    bank = session.get(Bank, bank_id)
+    if not bank:
+        raise HTTPException(status_code=404, detail="Bank not found")
+    if user.role != "admin" and not bank.is_public:
+        raise HTTPException(status_code=403, detail="无权访问非公开题库")
+
+
 @router.get("/", response_model=schemas.PaginatedQuestions)
 async def list_questions(
     bank_id: int = Query(..., description="题库 ID"),
@@ -85,7 +94,7 @@ async def list_questions(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> schemas.PaginatedQuestions:
-    _ensure_bank(session, bank_id)
+    _ensure_bank_readable(session, bank_id, current_user)
     total_stmt = select(func.count(QuestionDB.id)).where(QuestionDB.bank_id == bank_id)
     total_result = session.exec(total_stmt).one_or_none()
     if isinstance(total_result, tuple):
@@ -209,11 +218,14 @@ async def list_favorite_questions(
     session: Session = Depends(get_session),
     current_user: User = Depends(get_current_user),
 ) -> list[schemas.Question]:
-    favorites = session.exec(
+    stmt = (
         select(QuestionDB)
         .join(FavoriteQuestion, FavoriteQuestion.question_id == QuestionDB.id)
         .where(FavoriteQuestion.user_id == current_user.id)
-    ).all()
+    )
+    if current_user.role != "admin":
+        stmt = stmt.join(Bank, Bank.id == QuestionDB.bank_id).where(Bank.is_public.is_(True))
+    favorites = session.exec(stmt).all()
     result: list[schemas.Question] = []
     for q in favorites:
         item = _to_schema(q)
@@ -257,6 +269,85 @@ async def remove_favorite_question(
         session.delete(favorite)
         session.commit()
     return None
+
+
+@router.get("/admin/{question_id}", response_model=schemas.Question)
+async def admin_get_question_by_id(
+    question_id: int,
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+) -> schemas.Question:
+    """Admin-only: load a question by id quickly."""
+    question = session.get(QuestionDB, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return _to_schema(question)
+
+
+@router.get("/admin/search", response_model=list[schemas.Question])
+async def admin_search_questions(
+    keyword: str | None = Query(None, description="关键字，模糊匹配题干和答案"),
+    limit: int = Query(50, description="返回数量上限", ge=1, le=500),
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+) -> list[schemas.Question]:
+    if not keyword or not keyword.strip():
+        raise HTTPException(status_code=400, detail="缺少关键字")
+    pattern = f"%{keyword.strip()}%"
+    stmt = (
+        select(QuestionDB)
+        .where(
+            or_(
+                QuestionDB.content.ilike(pattern),
+                QuestionDB.standard_answer.ilike(pattern),
+            )
+        )
+        .limit(limit)
+    )
+    rows = session.exec(stmt).all()
+    return [_to_schema(q) for q in rows]
+
+
+@router.get("/admin/issues", response_model=list[schemas.Question])
+async def admin_list_issue_logs(
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+) -> list[schemas.QuestionIssueWithQuestion]:
+    """Admin-only: list issue records from DB, with question details."""
+    issues = session.exec(select(QuestionIssue).order_by(QuestionIssue.created_at.desc())).all()
+    results: list[schemas.QuestionIssueWithQuestion] = []
+    for issue in issues:
+        q = session.get(QuestionDB, issue.question_id)
+        if q:
+            results.append(
+                schemas.QuestionIssueWithQuestion(
+                    **issue.model_dump(),
+                    question=_to_schema(q),
+                )
+            )
+    return results
+
+
+@router.patch("/admin/issues/{issue_id}", response_model=schemas.QuestionIssueWithQuestion)
+async def admin_update_issue(
+    issue_id: int,
+    payload: schemas.QuestionIssueUpdate,
+    session: Session = Depends(get_session),
+    _: User = Depends(require_admin),
+) -> schemas.QuestionIssueWithQuestion:
+    issue = session.get(QuestionIssue, issue_id)
+    if not issue:
+        raise HTTPException(status_code=404, detail="Issue not found")
+    issue.status = payload.status
+    if payload.reason is not None:
+        issue.reason = payload.reason
+    session.add(issue)
+    session.commit()
+    session.refresh(issue)
+    question = session.get(QuestionDB, issue.question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    return schemas.QuestionIssueWithQuestion(**issue.model_dump(), question=_to_schema(question))
 
 @router.post("/ai/batch-import", response_model=schemas.BatchImportResponse)
 async def batch_import(

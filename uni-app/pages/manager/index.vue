@@ -1,32 +1,43 @@
 <template>
 	<view class="page">
-		<view class="section">
-			<view class="section-header">
-				<view>
-					<text class="eyebrow">题库</text>
-					<text class="title">增删改查</text>
-				</view>
-				<view class="header-actions">
-					<button class="ghost" size="mini" @click="resetBankForm">新建题库</button>
-					<button class="ghost" size="mini" @click="goMerge">合并题库</button>
-				</view>
+	<view class="section">
+		<view class="section-header">
+			<view>
+				<text class="eyebrow">题库</text>
+				<text class="title">增删改查</text>
 			</view>
-			<view class="form-card">
-				<input v-model="bankForm.title" placeholder="题库名称" class="input" />
-				<input v-model="bankForm.description" placeholder="描述（可选）" class="input" />
-				<label class="switch-row">
-					<text>公开题库</text>
-					<switch :checked="bankForm.is_public" @change="(e) => (bankForm.is_public = e.detail.value)" />
-				</label>
-				<button class="primary" :loading="bankSaving" @click="submitBank">
-					{{ bankForm.id ? '更新题库' : '创建题库' }}
-				</button>
+			<view class="header-actions">
+				<button class="ghost" size="mini" @click="resetBankForm">新建题库</button>
+				<button class="ghost" size="mini" @click="goMerge">合并题库</button>
+				<button class="ghost" size="mini" @click="goIssues">疑似错题</button>
+				<button class="ghost" size="mini" @click="goSearch">搜索题目</button>
 			</view>
+		</view>
+		<view class="form-card">
+			<input v-model="bankForm.title" placeholder="题库名称" class="input" />
+			<input v-model="bankForm.description" placeholder="描述（可选）" class="input" />
+			<label class="switch-row">
+				<text>公开题库</text>
+				<switch :checked="bankForm.is_public" @change="(e) => (bankForm.is_public = e.detail.value)" />
+			</label>
+			<button class="primary" :loading="bankSaving" @click="submitBank">
+				{{ bankForm.id ? '更新题库' : '创建题库' }}
+			</button>
+		</view>
 
-			<view class="list" v-if="banks.length">
-				<view v-for="bank in banks" :key="bank.id" class="item">
-					<view class="item-main">
-						<text class="item-title">{{ bank.title }}</text>
+		<view class="form-card quick-card">
+			<view class="row">
+				<text class="label">按题目ID快速编辑（仅管理员）</text>
+				<input v-model="quickQid" placeholder="输入题目ID" class="input" type="number" />
+				<button class="ghost" size="mini" :loading="quickLoading" @click="openByQid">打开</button>
+			</view>
+			<view v-if="quickError" class="warn">{{ quickError }}</view>
+		</view>
+
+		<view class="list" v-if="banks.length">
+			<view v-for="bank in banks" :key="bank.id" class="item">
+				<view class="item-main">
+					<text class="item-title">{{ bank.title }}</text>
 						<text class="item-desc">{{ bank.description || '暂无描述' }}</text>
 					</view>
 					<view class="actions">
@@ -231,6 +242,7 @@ import {
   saveManualQuestion,
   updateBank,
   updateQuestionApi,
+  adminGetQuestionById,
 } from '../../services/api'
 
 const banks = ref([])
@@ -249,6 +261,9 @@ const importRecursive = ref(true)
 const importLoading = ref(false)
 const importReport = ref(null)
 const QUESTION_PAGE_SIZE = 10
+const quickQid = ref('')
+const quickLoading = ref(false)
+const quickError = ref('')
 
 const questionTypes = [
   { label: '单选', value: 'choice_single' },
@@ -287,6 +302,28 @@ const goPrevPage = () => goToPage(questionPage.value - 1)
 const goNextPage = () => goToPage(questionPage.value + 1)
 const goMerge = () => {
   uni.navigateTo({ url: '/pages/manager/merge' })
+}
+const goIssues = () => {
+  uni.navigateTo({ url: '/pages/manager/issues' })
+}
+const goSearch = () => {
+  uni.navigateTo({ url: '/pages/manager/search' })
+}
+
+const openByQid = async () => {
+  quickError.value = ''
+  if (!quickQid.value) {
+    quickError.value = '请输入题目ID'
+    return
+  }
+  quickLoading.value = true
+  try {
+    await uni.navigateTo({ url: `/pages/manager/qid?qid=${quickQid.value}` })
+  } catch (err) {
+    quickError.value = err.message || '跳转失败'
+  } finally {
+    quickLoading.value = false
+  }
 }
 
 onLoad(() => {
@@ -676,6 +713,23 @@ const runBatchImport = async () => {
 	display: flex;
 	flex-direction: column;
 	gap: 10rpx;
+}
+.quick-card .row {
+	align-items: center;
+	gap: 12rpx;
+}
+.quick-result {
+	margin-top: 8rpx;
+	background: #f8fafc;
+	border-radius: 8rpx;
+	padding: 12rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 6rpx;
+}
+.option-line {
+	display: flex;
+	gap: 8rpx;
 }
 
 .chips {

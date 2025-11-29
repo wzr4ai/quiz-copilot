@@ -45,6 +45,15 @@ class WrongRecord(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
 
+class QuestionIssue(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    question_id: int = Field(foreign_key="question.id", index=True)
+    bank_id: int = Field(foreign_key="bank.id", index=True)
+    reason: str = Field(default="")
+    status: str = Field(default="pending", description="pending | verified_ok | corrected")
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+
+
 class FavoriteBank(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     user_id: int = Field(foreign_key="user.id")

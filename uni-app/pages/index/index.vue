@@ -4,7 +4,7 @@
 			<view>
 				<text class="eyebrow">SmartQuiz</text>
 				<text class="title">智刷 AI 题库</text>
-				<text class="subtitle">快速导入，随时刷题。</text>
+				<text class="subtitle">注册登录后使用，可保存错题和背题进度。</text>
 			</view>
 		</view>
 
