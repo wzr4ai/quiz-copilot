@@ -1,4 +1,5 @@
-const API_BASE = 'https://fnos.dfwzr.com:8233/api/v1'
+//const API_BASE = 'https://fnos.dfwzr.com:8233/api/v1'
+const API_BASE = 'http://10.10.10.22:8001/api/v1'
 
 export const getToken = () => uni.getStorageSync('token')
 export const getRole = () => uni.getStorageSync('role')
