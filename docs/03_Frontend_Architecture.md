@@ -9,6 +9,7 @@
 | `pages/quiz/result` | 结果页 | 展示本次练习得分、错题解析。 |
 | `pages/editor/add` | 录题中心 | 选择“文本导入”或“拍照导入”，识别后可预览并编辑题目。 |
 | `pages/profile/index`| 个人中心 | 历史记录、设置。 |
+| `pages/quiz/smart` | 智能刷题 | 智能刷题入口、配置与答题流程（实时解析、错题强化）。 |
 
 ## 2. 关键组件 (Components)
 
@@ -26,6 +27,7 @@
 ## 3. 状态管理 (Pinia)
 * `useQuizStore`: 管理当前正在做的题目队列、用户当前的答案、倒计时。
 * `useUserStore`: 管理 JWT Token、用户信息。
+* `useSmartPracticeStore`: 管理智能刷题 Session/题组、实时解析开关、强化状态。
 
 ## 4. 当前 H5 MVP 交互
 - 首页请求 `/api/v1/banks` 填充题库卡片，并提供“错题重练”快捷入口（传参 `mode=wrong`）。

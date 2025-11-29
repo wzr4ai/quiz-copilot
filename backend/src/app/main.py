@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, banks, questions, study
+from app.api import auth, banks, questions, smart_practice, study
 from app.core.config import settings
 from app.db import init_db
 
@@ -25,6 +25,9 @@ def create_app() -> FastAPI:
     application.include_router(auth.router, prefix="/api/v1/auth", tags=["Auth"])
     application.include_router(banks.router, prefix="/api/v1/banks", tags=["Banks"])
     application.include_router(questions.router, prefix="/api/v1/questions", tags=["Questions"])
+    application.include_router(
+        smart_practice.router, prefix="/api/v1/smart-practice", tags=["SmartPractice"]
+    )
     application.include_router(study.router, prefix="/api/v1/study", tags=["Study"])
 
     @application.get("/health", tags=["Health"])

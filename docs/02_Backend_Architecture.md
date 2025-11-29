@@ -24,6 +24,15 @@
 * `POST /submit`: 提交答案。如果是主观题，触发后台 AI 判分任务。
 * `GET /wrong`: 拉取错题本（根据最近一次答题记录，正确后自动覆盖旧错题）。
 
+### `/api/v1/smart-practice` (智能刷题)
+* `GET /status`: 查询是否有进行中的智能刷题 Session。
+* `GET/PUT /settings`: 读取与保存智能刷题配置（题库、题组数量、题型占比、实时解析开关）。
+* `POST /session/start`: 按配置生成新的智能刷题 Session 与首个题组。
+* `POST /session/{id}/answer`: 提交答案（强化阶段不计数）。
+* `POST /session/{id}/toggle-analysis`: 持久化实时解析开关。
+* `POST /session/{id}/next-group`: 结束当前组后进入错题强化或新一轮（优先计数最小的题目）。
+* `POST /session/{id}/finish`: 结束当前智能刷题。
+
 ## 2. 项目结构示例
 ```python
 # app/main.py

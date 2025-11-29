@@ -1,5 +1,9 @@
-//const API_BASE = 'https://fnos.dfwzr.com:8233/api/v1'
-const API_BASE = 'http://10.10.10.22:8001/api/v1'
+const API_BASE = 'https://fnos.dfwzr.com:8232/api/v1'
+//const API_BASE = 'http://10.10.10.22:8001/api/v1'
+// 硬编码环境为 dev，如需放开注册可改为 'prod' 或空字符串
+const APP_ENV = 'dev'
+// const APP_ENV = 'prod'
+const IS_DEV_ENV = true
 
 export const getToken = () => uni.getStorageSync('token')
 export const getRole = () => uni.getStorageSync('role')
@@ -58,11 +62,15 @@ export const login = ({ username, password }) =>
     })
   })
 
-export const register = ({ username, password }) =>
-  request('/auth/register', { method: 'POST', data: { username, password } }).then((res) => {
+export const register = ({ username, password }) => {
+  if (IS_DEV_ENV) {
+    return Promise.reject(new Error('当前为 dev 环境，已禁用注册'))
+  }
+  return request('/auth/register', { method: 'POST', data: { username, password } }).then((res) => {
     if (res?.access_token) setAuth({ token: res.access_token, role: res.role, username: res.username })
     return res
   })
+}
 
 export const fetchBanks = () => request('/banks')
 export const createBank = (payload) => request('/banks', { method: 'POST', data: payload })
@@ -101,3 +109,28 @@ export const submitSession = (payload) => request('/study/submit', { method: 'PO
 export const listWrongQuestions = () => request('/study/wrong')
 export const recordAnswer = (questionId, answer) =>
   request('/study/record', { method: 'POST', data: { question_id: questionId, answer } })
+
+// 智能刷题
+export const fetchSmartPracticeStatus = () => request('/smart-practice/status')
+export const fetchSmartPracticeSettings = () => request('/smart-practice/settings')
+export const saveSmartPracticeSettings = (payload) =>
+  request('/smart-practice/settings', { method: 'PUT', data: payload })
+export const startSmartPracticeSession = () =>
+  request('/smart-practice/session/start', { method: 'POST' })
+export const answerSmartPracticeQuestion = (sessionId, payload) =>
+  request(`/smart-practice/session/${sessionId}/answer`, { method: 'POST', data: payload })
+export const toggleSmartPracticeAnalysis = (sessionId, realtime) =>
+  request(`/smart-practice/session/${sessionId}/toggle-analysis`, {
+    method: 'POST',
+    data: { realtime_analysis: realtime },
+  })
+export const fetchCurrentSmartPracticeGroup = (sessionId) =>
+  request(`/smart-practice/session/${sessionId}/current`)
+export const nextSmartPracticeGroup = (sessionId) =>
+  request(`/smart-practice/session/${sessionId}/next-group`, { method: 'POST' })
+export const finishSmartPracticeSession = (sessionId) =>
+  request(`/smart-practice/session/${sessionId}/finish`, { method: 'POST' })
+export const resetSmartPracticeState = () =>
+  request('/smart-practice/session/reset', { method: 'DELETE' })
+export const feedbackSmartPracticeQuestion = (sessionId, payload) =>
+  request(`/smart-practice/session/${sessionId}/feedback`, { method: 'POST', data: payload })

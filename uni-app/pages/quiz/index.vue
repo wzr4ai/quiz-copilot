@@ -28,7 +28,8 @@
 
 		<view class="card" v-else>
 			<view class="card-top">
-				<text class="question-type">{{ typeLabel(currentQuestion.type) }}</text>
+				<text class="question-type" :class="'type-' + currentQuestion.type">{{ typeLabel(currentQuestion.type) }}</text>
+				<text v-if="isAdmin" class="qid">QID: {{ currentQuestion.id }}</text>
 				<view class="card-actions">
 					<button class="ghost small" @click="toggleFavorite">
 						{{ isFavorited ? '取消收藏' : '收藏' }}
@@ -605,6 +606,18 @@ const syncFavoriteStatus = () => {
 	color: #0ea5e9;
 	font-weight: 600;
 }
+.question-type.type-choice_single {
+	color: #0ea5e9;
+}
+.question-type.type-choice_multi {
+	color: #22c55e;
+}
+.question-type.type-choice_judgment {
+	color: #f59e0b;
+}
+.question-type.type-short_answer {
+	color: #8b5cf6;
+}
 
 .question-content {
 	font-size: 32rpx;
@@ -616,6 +629,11 @@ const syncFavoriteStatus = () => {
 	display: flex;
 	gap: 10rpx;
 	align-items: center;
+}
+
+.qid {
+	color: #94a3b8;
+	font-size: 22rpx;
 }
 
 .options {

@@ -175,3 +175,77 @@ class QuestionIssueUpdate(BaseModel):
 
 class QuestionIssueWithQuestion(QuestionIssue):
     question: Question
+
+
+class SmartPracticeSettingsPayload(BaseModel):
+    bank_ids: List[int] = Field(default_factory=list)
+    target_count: int = Field(default=50, ge=1)
+    type_ratio: dict = Field(default_factory=dict)
+    realtime_analysis: bool = False
+
+
+class SmartPracticeSettingsResponse(SmartPracticeSettingsPayload):
+    id: int
+    updated_at: datetime
+
+
+class SmartPracticeStatus(BaseModel):
+    has_active: bool
+    session_id: Optional[str] = None
+    status: Optional[str] = None
+    current_group_index: Optional[int] = None
+    round: Optional[int] = None
+    realtime_analysis: Optional[bool] = None
+    pending_wrong: Optional[int] = None
+    total_answered: Optional[int] = None
+    total_correct: Optional[int] = None
+    total_wrong: Optional[int] = None
+    reinforce_remaining: Optional[int] = None
+    practice_count_stats: Optional[dict[int, int]] = None
+    lowest_count_remaining: Optional[int] = None
+
+
+class SmartPracticeQuestion(BaseModel):
+    id: int
+    content: str
+    type: str
+    options: List[Option] = Field(default_factory=list)
+    analysis: Optional[str] = None
+    standard_answer: Optional[str] = None
+    user_answer: Optional[str] = None
+    is_correct: Optional[bool] = None
+
+
+class SmartPracticeGroup(BaseModel):
+    session_id: str
+    group_id: int
+    group_index: int
+    mode: str
+    round: int
+    total_questions: int
+    realtime_analysis: bool
+    current_question_index: Optional[int] = None
+    lowest_count_remaining: Optional[int] = None
+    questions: List[SmartPracticeQuestion]
+
+
+class SmartPracticeAnswerRequest(BaseModel):
+    question_id: int
+    answer: str
+    current_index: Optional[int] = None
+
+
+class SmartPracticeAnswerResponse(BaseModel):
+    is_correct: bool
+    counted: bool
+    analysis: Optional[str] = None
+    standard_answer: Optional[str] = None
+
+
+class SmartPracticeToggleRequest(BaseModel):
+    realtime_analysis: bool
+
+
+class SmartPracticeFeedbackRequest(BaseModel):
+    question_id: int
+    reason: str = Field(default="")

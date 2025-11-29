@@ -45,18 +45,62 @@
 				</view>
 			</view>
 		</view>
+
+		<view class="card">
+			<text class="card-title">智能刷题</text>
+			<view v-if="smartStatus">
+				<text class="hint">状态：{{ smartStatus.has_active ? smartStatus.status : '未开始' }}</text>
+				<text class="hint" v-if="smartStatus.has_active">Session: {{ smartStatus.session_id }}</text>
+				<text class="hint" v-if="smartStatus.has_active">组：{{ (smartStatus.current_group_index || 0) + 1 }} ｜ 轮次：{{ smartStatus.round }}</text>
+				<text class="hint" v-if="typeof smartStatus.pending_wrong === 'number'">待巩固：{{ smartStatus.pending_wrong }}</text>
+				<text class="hint" v-if="typeof smartStatus.total_answered === 'number'">
+					本组已答：{{ smartStatus.total_answered }} ｜ 正确：{{ smartStatus.total_correct || 0 }} ｜ 错误：{{ smartStatus.total_wrong || 0 }}
+				</text>
+				<text class="hint" v-if="typeof smartStatus.reinforce_remaining === 'number'">
+					强化剩余：{{ smartStatus.reinforce_remaining }}
+				</text>
+				<view v-if="practiceStatsList.length" class="stats-list">
+					<text class="hint">题目计数分布：</text>
+					<view v-for="item in practiceStatsList" :key="item.count" class="stat-row">
+						<text class="hint">计数 {{ item.count }}：{{ item.total }} 题</text>
+					</view>
+				</view>
+			</view>
+			<view v-else>
+				<text class="hint">暂无智能刷题记录</text>
+			</view>
+			<view class="actions">
+				<button class="ghost" @click="() => uni.navigateTo({ url: '/pages/quiz/smart' })">进入智能刷题</button>
+				<button class="ghost" :loading="statsLoading" @click="loadSmartStatus">统计计数</button>
+				<button class="ghost danger" :disabled="!smartStatus?.has_active" @click="resetSmart">重置状态</button>
+			</view>
+		</view>
 	</view>
 </template>
 
 <script setup>
+import { onShow } from '@dcloudio/uni-app'
 import { ref } from 'vue'
-import { clearToken, getRole, getToken, getUsername, login, register, setAuth } from '../../services/api'
+import {
+  clearToken,
+  fetchSmartPracticeStatus,
+  getRole,
+  getToken,
+  getUsername,
+  login,
+  register,
+  resetSmartPracticeState,
+  setAuth,
+} from '../../services/api'
 
 const username = ref(getUsername() || '')
 const password = ref('')
 const token = ref(getToken())
 const role = ref(getRole() || '')
 const loading = ref(false)
+const smartStatus = ref(null)
+const practiceStatsList = ref([])
+const statsLoading = ref(false)
 
 const handleUnified = async () => {
   if (!username.value || !password.value) {
@@ -113,6 +157,51 @@ const handleLogout = () => {
   setAuth({ token: '', role: '', username: '' })
   uni.showToast({ title: '已退出', icon: 'none' })
 }
+
+const loadSmartStatus = async () => {
+  statsLoading.value = true
+  if (!getToken()) {
+    smartStatus.value = null
+    practiceStatsList.value = []
+    statsLoading.value = false
+    return
+  }
+  try {
+    smartStatus.value = await fetchSmartPracticeStatus()
+    const stats = smartStatus.value?.practice_count_stats || {}
+    practiceStatsList.value = Object.keys(stats)
+      .map((k) => ({ count: Number(k), total: stats[k] }))
+      .sort((a, b) => a.count - b.count)
+  } catch (err) {
+    smartStatus.value = null
+    practiceStatsList.value = []
+  } finally {
+    statsLoading.value = false
+  }
+}
+
+const resetSmart = async () => {
+  const modal = await uni.showModal({
+    title: '重置智能刷题',
+    content: '将删除当前进行中的智能刷题状态（题组、进度），是否继续？',
+    confirmText: '重置',
+  })
+  if (!modal.confirm) return
+  try {
+    await resetSmartPracticeState()
+    smartStatus.value = null
+    uni.showToast({ title: '已重置', icon: 'none' })
+  } catch (err) {
+    uni.showToast({ title: err.message || '重置失败', icon: 'none' })
+  }
+}
+
+onShow(() => {
+  token.value = getToken()
+  role.value = getRole() || ''
+  username.value = getUsername() || ''
+  loadSmartStatus()
+})
 </script>
 
 <style>

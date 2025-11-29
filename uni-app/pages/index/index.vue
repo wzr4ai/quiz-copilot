@@ -15,6 +15,10 @@
 					<text class="action-label">开始练习</text>
 					<text class="action-desc">随机题库</text>
 				</view>
+				<view class="action" @click="toSmart">
+					<text class="action-label">智能刷题</text>
+					<text class="action-desc">题型占比+强化</text>
+				</view>
 				<view class="action" @click="toQuiz('', 'favorite')">
 					<text class="action-label">收藏刷题</text>
 					<text class="action-desc">练收藏</text>
@@ -114,6 +118,10 @@ onShow(loadBanks)
 
 const toQuiz = (bankId, mode = 'random') => {
   uni.navigateTo({ url: `/pages/quiz/index?bankId=${bankId || ''}&mode=${mode}` })
+}
+
+const toSmart = () => {
+  uni.navigateTo({ url: '/pages/quiz/smart' })
 }
 
 const toEditor = (mode) => {

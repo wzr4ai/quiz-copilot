@@ -7,6 +7,12 @@
       }
     },
     {
+      "path": "pages/quiz/smart",
+      "style": {
+        "navigationBarTitleText": "智能刷题"
+      }
+    },
+    {
       "path": "pages/quiz/index",
       "style": {
         "navigationBarTitleText": "答题"
