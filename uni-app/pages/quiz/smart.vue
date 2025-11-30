@@ -156,7 +156,7 @@
 
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
-import { onShow } from '@dcloudio/uni-app'
+import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import {
   answerSmartPracticeQuestion,
   fetchBanks,
@@ -423,6 +423,14 @@ const submitText = async () => {
   await sendAnswer(q.id, answers[q.id])
 }
 
+const flushCurrentAnswer = async () => {
+  const q = currentQuestion.value
+  if (!q || !sessionId.value) return
+  if (q.type === 'short_answer' && answers[q.id]) {
+    await submitText()
+  }
+}
+
 const sendAnswer = async (questionId, answer) => {
   if (group.value?.realtime_analysis && locked[questionId]) return
   const q = (group.value?.questions || []).find((item) => item.id === questionId)
@@ -461,6 +469,9 @@ const handleNext = async () => {
     await confirmMulti()
     if (!answers[q.id]) return
   }
+  if (q.type === 'short_answer') {
+    await flushCurrentAnswer()
+  }
   if (!isLastQuestion.value) {
     _safeIndex.value = Math.min(currentIndex.value + 1, (group.value?.questions?.length || 1) - 1)
     return
@@ -470,6 +481,7 @@ const handleNext = async () => {
 
 const completeGroup = async () => {
   if (!sessionId.value) return
+  await flushCurrentAnswer()
   const missing = (group.value?.questions || []).find((q) => !answers[q.id])
   if (missing) {
     return uni.showToast({ title: '还有未作答题目', icon: 'none' })
@@ -651,6 +663,14 @@ onShow(async () => {
   if (sessionId.value) {
     await loadCurrentGroup()
   }
+})
+
+onHide(async () => {
+  await flushCurrentAnswer()
+})
+
+onUnload(async () => {
+  await flushCurrentAnswer()
 })
 </script>
 

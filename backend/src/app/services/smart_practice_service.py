@@ -523,10 +523,16 @@ def answer_question(
         db.add(question)
 
     existing = db.exec(
-        select(SmartPracticeAnswer).where(
-            SmartPracticeAnswer.session_id == session_id, SmartPracticeAnswer.question_id == payload.question_id
+        select(SmartPracticeAnswer)
+        .where(
+            SmartPracticeAnswer.session_id == session_id,
+            SmartPracticeAnswer.question_id == payload.question_id,
         )
+        .order_by(SmartPracticeAnswer.answered_at.desc())
     ).first()
+    if existing and existing.answered_at < group.created_at:
+        # 旧组的答案，对当前组无效
+        existing = None
 
     # 考试模式：仅记录最终答案，不计数，最终在组完成时统一结算
     if not sp_session.realtime_analysis:
@@ -656,16 +662,25 @@ def _wrong_questions_for_group(db: Session, sp_session: SmartPracticeSession, gr
             SmartPracticeAnswer.question_id.in_(item_question_ids),
         )
     ).all()
-    answered_map = {a.question_id: a for a in answers}
+    # 只看当前组产生的作答（或更晚的更新），并保留每题最新一次
+    recent_answers: dict[int, SmartPracticeAnswer] = {}
+    for ans in answers:
+        if ans.answered_at < group.created_at:
+            continue
+        prev = recent_answers.get(ans.question_id)
+        if not prev or ans.answered_at >= prev.answered_at:
+            recent_answers[ans.question_id] = ans
+    answered_map = recent_answers
     missing = [qid for qid in item_question_ids if qid not in answered_map]
     if missing:
         raise HTTPException(status_code=400, detail="还有未作答的题目，无法进入下一组")
 
     # 考试模式：在提交组时统一判分并计数
     if not sp_session.realtime_analysis:
+        current_answers = list(recent_answers.values())
         questions = db.exec(select(Question).where(Question.id.in_(item_question_ids))).all()
         qmap = {q.id: q for q in questions}
-        for ans in answers:
+        for ans in current_answers:
             q = qmap.get(ans.question_id)
             if not q:
                 continue
@@ -684,7 +699,7 @@ def _wrong_questions_for_group(db: Session, sp_session: SmartPracticeSession, gr
                 q.practice_count = 0
                 db.add(q)
         db.commit()
-        answered_map = {a.question_id: a for a in answers}
+        answered_map = {a.question_id: a for a in current_answers}
 
     wrong = [qid for qid, a in answered_map.items() if not a.is_correct]
     return wrong
