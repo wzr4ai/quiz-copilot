@@ -337,8 +337,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     questions = _load_questions(db, settings.bank_ids, user)
     if not questions:
         raise HTTPException(status_code=400, detail="所选题库暂无可用题目")
-
-        selected, summary = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
+    selected, summary = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
     if not selected:
         raise HTTPException(status_code=400, detail="无法生成题组，题库题目数量不足")
 

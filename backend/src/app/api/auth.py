@@ -5,6 +5,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
+from app.core.config import settings
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db import get_session
 from app.models.db_models import User
@@ -27,6 +28,9 @@ class RegisterRequest(BaseModel):
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 async def register(payload: RegisterRequest, session: Session = Depends(get_session)) -> TokenResponse:
+    if settings.app_env.lower() == "development":
+        raise HTTPException(status_code=403, detail="当前环境不允许注册新用户")
+
     existing = session.exec(select(User).where(User.username == payload.username)).first()
     if existing:
         raise HTTPException(status_code=400, detail="用户已存在")

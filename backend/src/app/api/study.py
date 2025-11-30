@@ -130,8 +130,11 @@ async def record_answer(
 
 def _normalize_answer(val: str, qtype: str) -> str:
     if qtype == "choice_multi":
-        parts = [p.strip().upper() for p in val.replace(" ", ",").split(",") if p.strip()]
-        parts.sort()
+        # 支持空格/中英文逗号等常见分隔，且兼容连续字母输入（如 "ABC"）
+        raw_parts = [p.strip().upper() for p in val.replace("，", ",").replace(" ", ",").split(",") if p.strip()]
+        if len(raw_parts) == 1 and len(raw_parts[0]) > 1 and raw_parts[0].isalpha():
+            raw_parts = list(raw_parts[0])
+        parts = sorted({p for p in raw_parts if p})
         return ",".join(parts)
     return val.strip().upper()
 

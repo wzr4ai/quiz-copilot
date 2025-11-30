@@ -11,7 +11,8 @@
    - `DATABASE_URL`：数据库连接。  
    - `SECRET_KEY`：JWT 签名。  
    - `ACCESS_TOKEN_EXPIRE_MINUTES`：令牌有效期（默认 60 分钟，可按需调整）。  
-   - AI：`ZAI_API_KEY`/`ZAI_API_BASE`/`ZAI_MODEL`，可选 `GEMINI_API_KEY` 等。
+   - AI：`ZAI_API_KEY`/`ZAI_API_BASE`/`ZAI_MODEL`，可选 `GEMINI_API_KEY` 等。  
+   - 默认 `DATABASE_URL`/`REDIS_URL` 使用 `localhost`，方便在本机运行（即便 Postgres/Redis 通过 Docker 启动，端口映射即可访问）；若后端也放入同一个 Docker 网络，则改成 `postgres` / `redis` 服务名。
 
 3) 初始化数据库  
    ```bash
