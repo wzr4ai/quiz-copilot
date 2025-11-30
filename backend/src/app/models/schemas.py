@@ -216,6 +216,12 @@ class SmartPracticeQuestion(BaseModel):
     is_correct: Optional[bool] = None
 
 
+class SmartPracticeSelectionItem(BaseModel):
+    type: str
+    count_min: int
+    count_next: int
+
+
 class SmartPracticeGroup(BaseModel):
     session_id: str
     group_id: int
@@ -226,6 +232,7 @@ class SmartPracticeGroup(BaseModel):
     realtime_analysis: bool
     current_question_index: Optional[int] = None
     lowest_count_remaining: Optional[int] = None
+    selection_summary: Optional[List[SmartPracticeSelectionItem]] = None
     questions: List[SmartPracticeQuestion]
 
 

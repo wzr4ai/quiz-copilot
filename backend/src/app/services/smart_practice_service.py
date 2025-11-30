@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 import re
 from datetime import datetime
@@ -84,44 +85,98 @@ def _allocate_counts(target_count: int, type_ratio: dict) -> dict[str, int]:
     return counts
 
 
+def _allocate_target_per_type(types: list[str], target_count: int, type_ratio: dict) -> dict[str, int]:
+    """Return per-type target counts. If type_ratio is empty, split evenly."""
+    if not types:
+        return {}
+    if type_ratio:
+        return _allocate_counts(target_count, type_ratio)
+    base = target_count // len(types)
+    remainder = target_count % len(types)
+    result: dict[str, int] = {t: base for t in types}
+    for t in types[:remainder]:
+        result[t] += 1
+    return result
+
+
 def _select_questions_by_ratio(
     questions: list[Question], target_count: int, type_ratio: dict
-) -> list[Question]:
+) -> tuple[list[Question], list[schemas.SmartPracticeSelectionItem]]:
     if not questions:
-        return []
-    if not type_ratio:
-        random.shuffle(questions)
-        return questions[:target_count]
+        return [], []
 
-    desired_counts = _allocate_counts(target_count, type_ratio)
+    # 题型过滤：仅保留在 ratio 中的题型（如 ratio 提供），否则全部
+    selected_types = [t for t, v in type_ratio.items() if v] if type_ratio else sorted({q.type for q in questions})
+    questions = [q for q in questions if q.type in selected_types]
+    if not questions:
+        return [], []
+
+    desired_counts = _allocate_target_per_type(selected_types, target_count, type_ratio)
+    min_count = min(q.practice_count for q in questions)
+
     questions_by_type: dict[str, list[Question]] = {}
+    next_by_type: dict[str, list[Question]] = {}
     for q in questions:
-        questions_by_type.setdefault(q.type, []).append(q)
+        if q.practice_count == min_count:
+            questions_by_type.setdefault(q.type, []).append(q)
+        elif q.practice_count == min_count + 1:
+            next_by_type.setdefault(q.type, []).append(q)
 
+    summary: list[schemas.SmartPracticeSelectionItem] = []
     selected: list[Question] = []
-    shortage = 0
-    for qtype, desired in desired_counts.items():
-        pool = questions_by_type.get(qtype, [])
-        random.shuffle(pool)
-        take = min(desired, len(pool))
-        selected.extend(pool[:take])
-        shortage += desired - take
+    selected_ids: set[int] = set()
+    max_next_cap = math.ceil(target_count * 0.2)
+    remaining_next_cap = max_next_cap
+
+    for qtype in selected_types:
+        pool_min = questions_by_type.get(qtype, [])
+        pool_next = next_by_type.get(qtype, [])
+        random.shuffle(pool_min)
+        random.shuffle(pool_next)
+
+        need = desired_counts.get(qtype, 0)
+        take_next = 0
+        if pool_next and remaining_next_cap > 0 and need > 0:
+            proportion = need * (len(pool_next) / (len(pool_min) + len(pool_next))) if (len(pool_min) + len(pool_next)) else 0
+            desired_next = max(1, math.ceil(proportion)) if proportion > 0 else 1
+            take_next = min(desired_next, len(pool_next), need, remaining_next_cap)
+        take_min = min(need - take_next, len(pool_min))
+
+        picked_next = pool_next[:take_next]
+        picked_min = pool_min[:take_min]
+        selected.extend(picked_min + picked_next)
+        selected_ids.update({q.id for q in picked_min + picked_next})
+        remaining_next_cap = max(0, remaining_next_cap - take_next)
+        summary.append(
+            schemas.SmartPracticeSelectionItem(
+                type=qtype,
+                count_min=len(picked_min),
+                count_next=len(picked_next),
+            )
+        )
+
+    # 补足不足的数量：优先最小计数，再次低计数，再其他
+    shortage = target_count - len(selected)
+    if shortage > 0:
+        remaining_min = [q for q in questions if q.practice_count == min_count and q.id not in selected_ids and q.type in selected_types]
+        random.shuffle(remaining_min)
+        selected.extend(remaining_min[:shortage])
+        selected_ids.update({q.id for q in selected})
+        shortage = target_count - len(selected)
 
     if shortage > 0:
-        remaining_pool = [q for q in questions if q.id not in {s.id for s in selected}]
+        remaining_next = [q for q in questions if q.practice_count == min_count + 1 and q.id not in selected_ids and q.type in selected_types]
+        random.shuffle(remaining_next)
+        selected.extend(remaining_next[:shortage])
+        selected_ids.update({q.id for q in selected})
+        shortage = target_count - len(selected)
+
+    if shortage > 0:
+        remaining_pool = [q for q in questions if q.id not in selected_ids]
         random.shuffle(remaining_pool)
         selected.extend(remaining_pool[:shortage])
 
-    if len(selected) < target_count:
-        remaining_pool = [q for q in questions if q.id not in {s.id for s in selected}]
-        random.shuffle(remaining_pool)
-        selected.extend(remaining_pool[: target_count - len(selected)])
-
-    # 如果题目总量仍不足，返回全部题目（去重）
-    unique = {}
-    for q in selected:
-        unique[q.id] = q
-    return list(unique.values())
+    return selected, summary
 
 
 def _prioritize_lowest_count(questions: list[Question], target_count: int) -> list[Question]:
@@ -174,7 +229,11 @@ def _build_group(
 
 
 def _serialize_group(
-    db: Session, group: SmartPracticeGroup, questions: Iterable[Question], sp_session: SmartPracticeSession
+    db: Session,
+    group: SmartPracticeGroup,
+    questions: Iterable[Question],
+    sp_session: SmartPracticeSession,
+    selection_summary: list[schemas.SmartPracticeSelectionItem] | None = None,
 ) -> schemas.SmartPracticeGroup:
     realtime = sp_session.realtime_analysis
     item_question_ids = [
@@ -215,6 +274,7 @@ def _serialize_group(
         realtime_analysis=realtime,
         current_question_index=sp_session.current_question_index,
         lowest_count_remaining=sp_session.lowest_count_remaining,
+        selection_summary=selection_summary,
         questions=question_map,
     )
 
@@ -278,7 +338,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     if not questions:
         raise HTTPException(status_code=400, detail="所选题库暂无可用题目")
 
-    selected = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
+        selected, summary = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
     if not selected:
         raise HTTPException(status_code=400, detail="无法生成题组，题库题目数量不足")
 
@@ -304,7 +364,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     db.commit()
     db.refresh(sp_session)
     db.refresh(group)
-    return _serialize_group(db, group, selected, sp_session)
+    return _serialize_group(db, group, selected, sp_session, selection_summary=summary)
 
 
 def get_current_group(db: Session, session_id: str, user: User) -> schemas.SmartPracticeGroup:
@@ -641,6 +701,7 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
     group_index = sp_session.current_group_index + 1
     questions: list[Question] = []
     mode = "normal"
+    summary: list[schemas.SmartPracticeSelectionItem] | None = None
 
     if wrong_question_ids:
         # 进入或继续强化
@@ -656,16 +717,14 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
             db, sp_session.settings_snapshot.get("bank_ids", []), user  # type: ignore[arg-type]
         )
         prefer_lowest = sp_session.round > 1
-        if prefer_lowest:
-            questions = _prioritize_lowest_count(questions, sp_session.settings_snapshot.get("target_count", 50))
-        else:
-            questions = _select_questions_by_ratio(
-                questions,
-                sp_session.settings_snapshot.get("target_count", 50),
-                sp_session.settings_snapshot.get("type_ratio", {}),
-            )
-        if not questions:
+        selected, summary = _select_questions_by_ratio(
+            questions,
+            sp_session.settings_snapshot.get("target_count", 50),
+            sp_session.settings_snapshot.get("type_ratio", {}),
+        )
+        if not selected:
             raise HTTPException(status_code=400, detail="题库题目不足，无法生成新题组")
+        questions = selected
         sp_session.lowest_count_remaining = _compute_lowest_count_remaining(
             db, sp_session.settings_snapshot.get("bank_ids", [])
         )
@@ -677,7 +736,7 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
     db.add(sp_session)
     db.commit()
     db.refresh(group)
-    return _serialize_group(db, group, questions, sp_session)
+    return _serialize_group(db, group, questions, sp_session, selection_summary=summary if mode == "normal" else None)
 
 
 def finish_session(db: Session, session_id: str, user: User) -> None:

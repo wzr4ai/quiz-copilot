@@ -223,6 +223,7 @@ const isAdmin = computed(() => role.value === 'admin')
 const realtimeSwitch = ref(true)
 const feedbackReason = ref('')
 const feedbackVisible = ref(false)
+const selectionSummary = ref([])
 const editMode = ref(false)
 
 const currentIndex = computed(() => {
@@ -367,6 +368,7 @@ const startSmart = async () => {
     status.status = res.mode === 'reinforce' ? 'reinforce' : 'in_progress'
     realtimeSwitch.value = true
     resetAnswers(res.questions || [], res.current_question_index || 0)
+    handleSelectionSummary(res)
   } catch (err) {
     uni.showToast({ title: err.message || '开启失败', icon: 'none' })
   } finally {
@@ -381,6 +383,7 @@ const loadCurrentGroup = async () => {
     group.value = { ...res, realtime_analysis: true }
     realtimeSwitch.value = true
     resetAnswers(res.questions || [], res.current_question_index || 0)
+    handleSelectionSummary(res)
   } catch (err) {
     uni.showToast({ title: err.message || '加载题组失败', icon: 'none' })
   }
@@ -481,6 +484,7 @@ const completeGroup = async () => {
     status.current_group_index = res.group_index
     status.round = res.round
     if (group.value?.questions?.[0]) loadEditForm(group.value.questions[0])
+    handleSelectionSummary(res)
   } catch (err) {
     uni.showToast({ title: err.message || '无法进入下一组', icon: 'none' })
   } finally {
@@ -616,6 +620,27 @@ const submitFeedback = async () => {
   } catch (err) {
     uni.showToast({ title: err.message || '反馈失败', icon: 'none' })
   }
+}
+
+const formatType = (type) => {
+  if (type === 'choice_single') return '单选'
+  if (type === 'choice_multi') return '多选'
+  if (type === 'choice_judgment') return '判断'
+  if (type === 'short_answer') return '简答'
+  return type
+}
+
+const handleSelectionSummary = (groupData) => {
+  selectionSummary.value = groupData.selection_summary || []
+  if (!selectionSummary.value.length) return
+  const lines = selectionSummary.value.map(
+    (item) => `${formatType(item.type)}：计数最小 ${item.count_min} 题${item.count_next ? `，次低计数 ${item.count_next} 题` : ''}`
+  )
+  uni.showModal({
+    title: '抽题结果',
+    content: lines.join('\n'),
+    showCancel: false,
+  })
 }
 
 onShow(async () => {
