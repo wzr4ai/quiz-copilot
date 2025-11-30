@@ -49,15 +49,22 @@
 		<view class="card">
 			<text class="card-title">智能刷题</text>
 			<view v-if="smartStatus">
-				<text class="hint">状态：{{ smartStatus.has_active ? smartStatus.status : '未开始' }}</text>
+				<text class="hint">状态：{{ smartStatusDisplay }}</text>
 				<text class="hint" v-if="smartStatus.has_active">Session: {{ smartStatus.session_id }}</text>
-				<text class="hint" v-if="smartStatus.has_active">组：{{ (smartStatus.current_group_index || 0) + 1 }} ｜ 轮次：{{ smartStatus.round }}</text>
-				<text class="hint" v-if="typeof smartStatus.pending_wrong === 'number'">待巩固：{{ smartStatus.pending_wrong }}</text>
+				<text class="hint" v-if="smartStatus.has_active">
+					组：{{ (smartStatus.current_group_index || 0) + 1 }} ｜ 轮次：{{ smartStatus.round || 1 }}
+				</text>
+				<text class="hint" v-if="typeof smartStatus.pending_wrong === 'number'">
+					待巩固（当前组错/未答）：{{ smartStatus.pending_wrong }}
+				</text>
 				<text class="hint" v-if="typeof smartStatus.total_answered === 'number'">
 					本组已答：{{ smartStatus.total_answered }} ｜ 正确：{{ smartStatus.total_correct || 0 }} ｜ 错误：{{ smartStatus.total_wrong || 0 }}
 				</text>
 				<text class="hint" v-if="typeof smartStatus.reinforce_remaining === 'number'">
 					强化剩余：{{ smartStatus.reinforce_remaining }}
+				</text>
+				<text class="hint" v-if="typeof smartStatus.lowest_count_remaining === 'number'">
+					当前轮最低计数剩余：{{ smartStatus.lowest_count_remaining }}
 				</text>
 				<view v-if="practiceStatsList.length" class="stats-list">
 					<text class="hint">题目计数分布：</text>
@@ -71,7 +78,7 @@
 			</view>
 			<view class="actions">
 				<button class="ghost" @click="() => uni.navigateTo({ url: '/pages/quiz/smart' })">进入智能刷题</button>
-				<button class="ghost" :loading="statsLoading" @click="loadSmartStatus">统计计数</button>
+				<button class="ghost" :loading="statsLoading" @click="loadSmartStatus">刷新数据</button>
 				<button class="ghost danger" :disabled="!smartStatus?.has_active" @click="resetSmart">重置状态</button>
 			</view>
 		</view>
@@ -80,7 +87,7 @@
 
 <script setup>
 import { onShow } from '@dcloudio/uni-app'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   clearToken,
   fetchSmartPracticeStatus,
@@ -101,6 +108,23 @@ const loading = ref(false)
 const smartStatus = ref(null)
 const practiceStatsList = ref([])
 const statsLoading = ref(false)
+const smartStatusLabel = computed(() => {
+  if (!smartStatus.value || !smartStatus.value.has_active) return '未开始'
+  if (smartStatus.value.status === 'reinforce') return '错题强化'
+  if (smartStatus.value.status === 'completed') return '已完成'
+  return '进行中'
+})
+const realtimeLabel = computed(() => {
+  if (!smartStatus.value) return ''
+  if (smartStatus.value.realtime_analysis === false) return '考试模式'
+  if (smartStatus.value.realtime_analysis === true) return '实时解析开启'
+  return ''
+})
+const smartStatusDisplay = computed(() => {
+  const base = smartStatusLabel.value
+  const rt = realtimeLabel.value
+  return rt ? `${base} ｜ ${rt}` : base
+})
 
 const handleUnified = async () => {
   if (!username.value || !password.value) {

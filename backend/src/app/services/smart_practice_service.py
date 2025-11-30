@@ -404,15 +404,20 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
             item.question_id
             for item in db.exec(select(SmartPracticeItem).where(SmartPracticeItem.group_id == current_group.id)).all()
         }
-        answered = {
-            ans.question_id: ans
-            for ans in db.exec(
-                select(SmartPracticeAnswer).where(
-                    SmartPracticeAnswer.session_id == active.id,
-                    SmartPracticeAnswer.question_id.in_(item_question_ids),
-                )
-            ).all()
-        }
+        # 仅统计当前组内、且回答时间不早于组创建时间的最新作答
+        answers = db.exec(
+            select(SmartPracticeAnswer).where(
+                SmartPracticeAnswer.session_id == active.id,
+                SmartPracticeAnswer.question_id.in_(item_question_ids),
+                SmartPracticeAnswer.answered_at >= current_group.created_at,
+            )
+        ).all()
+        answered: dict[int, SmartPracticeAnswer] = {}
+        for ans in answers:
+            prev = answered.get(ans.question_id)
+            if not prev or ans.answered_at >= prev.answered_at:
+                answered[ans.question_id] = ans
+
         missing = item_question_ids - set(answered.keys())
         wrong_ids = [qid for qid, ans in answered.items() if not ans.is_correct]
         pending_wrong = len(wrong_ids) + len(missing)
