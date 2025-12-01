@@ -345,9 +345,12 @@ const resetAnswers = (questions, currentIndex = 0) => {
       locked[q.id] = true
       feedback[q.id] = {
         is_correct: q.is_correct,
-        counted: false,
+        counted: typeof q.counted === 'boolean' ? q.counted : false,
         standard_answer: q.standard_answer || '',
         analysis: q.analysis || '',
+      }
+      if (q.is_correct === false) {
+        everWrong[q.id] = true
       }
     }
   })
@@ -448,6 +451,7 @@ const sendAnswer = async (questionId, answer) => {
       ...res,
       standard_answer: res.standard_answer || q?.standard_answer || '',
       analysis: res.analysis || q?.analysis || '',
+      counted: res.counted,
     }
     if (!res.is_correct) {
       everWrong[questionId] = true

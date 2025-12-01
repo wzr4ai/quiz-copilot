@@ -237,6 +237,7 @@ def _serialize_group(
                 user_answer=answer.user_answer if answer else None,
                 is_correct=answer.is_correct if answer else None,
                 practice_count=q.practice_count,
+                counted=answer.counted if answer else None,
             )
         )
     return schemas.SmartPracticeGroup(
