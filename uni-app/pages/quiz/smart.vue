@@ -206,6 +206,7 @@ const multiSelections = reactive({})
 const feedback = reactive({})
 const locked = reactive({})
 const initialCounts = reactive({})
+const everWrong = reactive({})
 const editForm = reactive({
   id: null,
   content: '',
@@ -332,6 +333,7 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(feedback).forEach((k) => delete feedback[k])
   Object.keys(locked).forEach((k) => delete locked[k])
   Object.keys(initialCounts).forEach((k) => delete initialCounts[k])
+  Object.keys(everWrong).forEach((k) => delete everWrong[k])
   const isReinforce = group.value?.mode === 'reinforce'
   questions.forEach((q) => {
     initialCounts[q.id] = typeof q.practice_count === 'number' ? q.practice_count : 0
@@ -448,6 +450,9 @@ const sendAnswer = async (questionId, answer) => {
       standard_answer: res.standard_answer || q?.standard_answer || '',
       analysis: res.analysis || q?.analysis || '',
     }
+    if (!res.is_correct) {
+      everWrong[questionId] = true
+    }
     if (group.value?.realtime_analysis) {
       locked[questionId] = true
     }
@@ -493,17 +498,19 @@ const buildRoundCountSummary = () => {
   group.value.questions.forEach((q) => {
     const fb = feedback[q.id]
     const initial = typeof initialCounts[q.id] === 'number' ? initialCounts[q.id] : 0
+    const wasWrong = !!everWrong[q.id] || fb?.is_correct === false
+    const countedUp = !!fb?.counted
     let nextCount = initial
-    if (fb?.is_correct === false) {
-      nextCount = 0
+    if (wasWrong) {
       summary.hasWrong = true
-    } else if (fb?.counted) {
+      nextCount = 0
+    } else if (countedUp) {
       nextCount = initial + 1
     }
-    if (fb?.counted) {
+    if (countedUp) {
       summary.increments[initial] = (summary.increments[initial] || 0) + 1
     }
-    if (fb?.is_correct === false && initial > 0) {
+    if (wasWrong && initial > 0) {
       summary.drops[initial] = (summary.drops[initial] || 0) + 1
     }
     if (initial === 0 && nextCount === 0) {
