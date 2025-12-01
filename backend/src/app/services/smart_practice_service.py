@@ -125,8 +125,15 @@ def _select_questions_by_ratio(
     summary: list[schemas.SmartPracticeSelectionItem] = []
     selected: list[Question] = []
     selected_ids: set[int] = set()
-    max_next_cap = math.ceil(target_count * 0.2)
-    remaining_next_cap = max_next_cap
+    per_type_next_cap: dict[str, int] = {}
+    used_next_by_type: dict[str, int] = {}
+    for qtype in selected_types:
+        pool_next = next_by_type.get(qtype, [])
+        if not pool_next:
+            per_type_next_cap[qtype] = 0
+        else:
+            per_type_next_cap[qtype] = max(1, math.ceil(len(pool_next) * 0.2))
+        used_next_by_type[qtype] = 0
 
     for qtype in selected_types:
         pool_min = questions_by_type.get(qtype, [])
@@ -136,17 +143,18 @@ def _select_questions_by_ratio(
 
         need = desired_counts.get(qtype, 0)
         take_next = 0
-        if pool_next and remaining_next_cap > 0 and need > 0:
+        if pool_next and need > 0:
             proportion = need * (len(pool_next) / (len(pool_min) + len(pool_next))) if (len(pool_min) + len(pool_next)) else 0
             desired_next = max(1, math.ceil(proportion)) if proportion > 0 else 1
-            take_next = min(desired_next, len(pool_next), need, remaining_next_cap)
+            cap = per_type_next_cap.get(qtype, 0)
+            take_next = min(desired_next, len(pool_next), need, max(0, cap - used_next_by_type.get(qtype, 0)))
         take_min = min(need - take_next, len(pool_min))
 
         picked_next = pool_next[:take_next]
         picked_min = pool_min[:take_min]
         selected.extend(picked_min + picked_next)
         selected_ids.update({q.id for q in picked_min + picked_next})
-        remaining_next_cap = max(0, remaining_next_cap - take_next)
+        used_next_by_type[qtype] = used_next_by_type.get(qtype, 0) + len(picked_next)
         summary.append(
             schemas.SmartPracticeSelectionItem(
                 type=qtype,
@@ -165,7 +173,29 @@ def _select_questions_by_ratio(
         shortage = target_count - len(selected)
 
     if shortage > 0:
-        remaining_next = [q for q in questions if q.practice_count == min_count + 1 and q.id not in selected_ids and q.type in selected_types]
+        allowed_next: list[Question] = []
+        for q in questions:
+            if (
+                q.practice_count == min_count + 1
+                and q.id not in selected_ids
+                and q.type in selected_types
+                and used_next_by_type.get(q.type, 0) < per_type_next_cap.get(q.type, 0)
+            ):
+                allowed_next.append(q)
+        random.shuffle(allowed_next)
+        take = allowed_next[:shortage]
+        selected.extend(take)
+        selected_ids.update({q.id for q in selected})
+        for q in take:
+            used_next_by_type[q.type] = used_next_by_type.get(q.type, 0) + 1
+        shortage = target_count - len(selected)
+
+    if shortage > 0:
+        remaining_next = [
+            q
+            for q in questions
+            if q.practice_count == min_count + 1 and q.id not in selected_ids and q.type in selected_types
+        ]
         random.shuffle(remaining_next)
         selected.extend(remaining_next[:shortage])
         selected_ids.update({q.id for q in selected})
