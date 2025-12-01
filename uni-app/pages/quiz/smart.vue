@@ -207,6 +207,25 @@ const feedback = reactive({})
 const locked = reactive({})
 const initialCounts = reactive({})
 const everWrong = reactive({})
+const getGroupStateKey = (sid, gid) => (sid && gid ? `sp_state_${sid}_${gid}` : '')
+const persistGroupState = () => {
+  const key = getGroupStateKey(sessionId.value, group.value?.group_id)
+  if (!key) return
+  uni.setStorageSync(key, {
+    initialCounts: { ...initialCounts },
+    everWrong: { ...everWrong },
+  })
+}
+const loadGroupState = () => {
+  const key = getGroupStateKey(sessionId.value, group.value?.group_id)
+  if (!key) return null
+  try {
+    const state = uni.getStorageSync(key)
+    return state || null
+  } catch (e) {
+    return null
+  }
+}
 const editForm = reactive({
   id: null,
   content: '',
@@ -334,8 +353,11 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(locked).forEach((k) => delete locked[k])
   Object.keys(initialCounts).forEach((k) => delete initialCounts[k])
   Object.keys(everWrong).forEach((k) => delete everWrong[k])
+  const cached = loadGroupState()
   questions.forEach((q) => {
-    initialCounts[q.id] = typeof q.practice_count === 'number' ? q.practice_count : 0
+    const cachedInitial = cached?.initialCounts?.[q.id]
+    initialCounts[q.id] =
+      typeof cachedInitial === 'number' ? cachedInitial : typeof q.practice_count === 'number' ? q.practice_count : 0
     const ua = q.user_answer || ''
     answers[q.id] = ua
     if (q.type === 'choice_multi') {
@@ -349,11 +371,13 @@ const resetAnswers = (questions, currentIndex = 0) => {
         standard_answer: q.standard_answer || '',
         analysis: q.analysis || '',
       }
-      if (q.is_correct === false) {
+      const cachedWrong = cached?.everWrong?.[q.id]
+      if (cachedWrong || q.is_correct === false) {
         everWrong[q.id] = true
       }
     }
   })
+  persistGroupState()
   _safeIndex.value = currentIndex || 0
   if (questions[currentIndex]) {
     editMode.value = false
@@ -456,6 +480,7 @@ const sendAnswer = async (questionId, answer) => {
     if (!res.is_correct) {
       everWrong[questionId] = true
     }
+    persistGroupState()
     if (group.value?.realtime_analysis) {
       locked[questionId] = true
     }
