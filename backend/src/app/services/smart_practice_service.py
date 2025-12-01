@@ -105,108 +105,52 @@ def _select_questions_by_ratio(
     if not questions:
         return [], []
 
-    # 题型过滤：仅保留在 ratio 中的题型（如 ratio 提供），否则全部
-    selected_types = [t for t, v in type_ratio.items() if v] if type_ratio else sorted({q.type for q in questions})
-    questions = [q for q in questions if q.type in selected_types]
-    if not questions:
+    # 允许的题型：type_ratio 仅作为过滤器；默认限单选/多选/判断
+    selected_types = [t for t, v in type_ratio.items() if v] if type_ratio else ["choice_single", "choice_multi", "choice_judgment"]
+    valid_questions = [q for q in questions if q.type in selected_types and q.practice_count >= 0]
+    if not valid_questions:
         return [], []
 
-    desired_counts = _allocate_target_per_type(selected_types, target_count, type_ratio)
-    min_count = min(q.practice_count for q in questions)
+    guaranteed_quota = min(20, target_count)
+    weighted_quota = max(0, target_count - guaranteed_quota)
 
-    questions_by_type: dict[str, list[Question]] = {}
-    next_by_type: dict[str, list[Question]] = {}
-    for q in questions:
-        if q.practice_count == min_count:
-            questions_by_type.setdefault(q.type, []).append(q)
-        elif q.practice_count == min_count + 1:
-            next_by_type.setdefault(q.type, []).append(q)
+    # 阶段一：全局绝对保底
+    random.shuffle(valid_questions)
+    valid_questions.sort(key=lambda q: q.practice_count)
+    picked_guaranteed = valid_questions[:guaranteed_quota]
+    picked_ids = {q.id for q in picked_guaranteed}
 
+    # 阶段二：加权补位（Efraimidis-Spirakis）
+    remaining_pool = [q for q in valid_questions if q.id not in picked_ids]
+    scored: list[tuple[float, Question]] = []
+    for q in remaining_pool:
+        score = random.random() ** (q.practice_count + 1)
+        scored.append((score, q))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    picked_weighted = [q for _, q in scored[:weighted_quota]]
+
+    # 合并与打乱
+    final_list = picked_guaranteed + picked_weighted
+    if len(final_list) < target_count:
+        # 若题库不足，尝试再补足剩余
+        leftovers = [q for q in remaining_pool if q.id not in {x.id for x in picked_weighted}]
+        random.shuffle(leftovers)
+        final_list.extend(leftovers[: target_count - len(final_list)])
+    random.shuffle(final_list)
+
+    # 摘要：统计各题型选中数量
     summary: list[schemas.SmartPracticeSelectionItem] = []
-    selected: list[Question] = []
-    selected_ids: set[int] = set()
-    per_type_next_cap: dict[str, int] = {}
-    used_next_by_type: dict[str, int] = {}
     for qtype in selected_types:
-        pool_next = next_by_type.get(qtype, [])
-        if not pool_next:
-            per_type_next_cap[qtype] = 0
-        else:
-            per_type_next_cap[qtype] = max(1, math.ceil(len(pool_next) * 0.2))
-        used_next_by_type[qtype] = 0
-
-    for qtype in selected_types:
-        pool_min = questions_by_type.get(qtype, [])
-        pool_next = next_by_type.get(qtype, [])
-        random.shuffle(pool_min)
-        random.shuffle(pool_next)
-
-        need = desired_counts.get(qtype, 0)
-        take_next = 0
-        if pool_next and need > 0:
-            proportion = need * (len(pool_next) / (len(pool_min) + len(pool_next))) if (len(pool_min) + len(pool_next)) else 0
-            desired_next = max(1, math.ceil(proportion)) if proportion > 0 else 1
-            cap = per_type_next_cap.get(qtype, 0)
-            take_next = min(desired_next, len(pool_next), need, max(0, cap - used_next_by_type.get(qtype, 0)))
-        take_min = min(need - take_next, len(pool_min))
-
-        picked_next = pool_next[:take_next]
-        picked_min = pool_min[:take_min]
-        selected.extend(picked_min + picked_next)
-        selected_ids.update({q.id for q in picked_min + picked_next})
-        used_next_by_type[qtype] = used_next_by_type.get(qtype, 0) + len(picked_next)
+        total = len([q for q in final_list if q.type == qtype])
         summary.append(
             schemas.SmartPracticeSelectionItem(
                 type=qtype,
-                count_min=len(picked_min),
-                count_next=len(picked_next),
+                count_min=total,
+                count_next=0,
             )
         )
 
-    # 补足不足的数量：优先最小计数，再次低计数，再其他
-    shortage = target_count - len(selected)
-    if shortage > 0:
-        remaining_min = [q for q in questions if q.practice_count == min_count and q.id not in selected_ids and q.type in selected_types]
-        random.shuffle(remaining_min)
-        selected.extend(remaining_min[:shortage])
-        selected_ids.update({q.id for q in selected})
-        shortage = target_count - len(selected)
-
-    if shortage > 0:
-        allowed_next: list[Question] = []
-        for q in questions:
-            if (
-                q.practice_count == min_count + 1
-                and q.id not in selected_ids
-                and q.type in selected_types
-                and used_next_by_type.get(q.type, 0) < per_type_next_cap.get(q.type, 0)
-            ):
-                allowed_next.append(q)
-        random.shuffle(allowed_next)
-        take = allowed_next[:shortage]
-        selected.extend(take)
-        selected_ids.update({q.id for q in selected})
-        for q in take:
-            used_next_by_type[q.type] = used_next_by_type.get(q.type, 0) + 1
-        shortage = target_count - len(selected)
-
-    if shortage > 0:
-        remaining_next = [
-            q
-            for q in questions
-            if q.practice_count == min_count + 1 and q.id not in selected_ids and q.type in selected_types
-        ]
-        random.shuffle(remaining_next)
-        selected.extend(remaining_next[:shortage])
-        selected_ids.update({q.id for q in selected})
-        shortage = target_count - len(selected)
-
-    if shortage > 0:
-        remaining_pool = [q for q in questions if q.id not in selected_ids]
-        random.shuffle(remaining_pool)
-        selected.extend(remaining_pool[:shortage])
-
-    return selected, summary
+    return final_list, summary
 
 
 def _prioritize_lowest_count(questions: list[Question], target_count: int) -> list[Question]:
