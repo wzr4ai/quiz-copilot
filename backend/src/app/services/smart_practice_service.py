@@ -141,12 +141,18 @@ def _select_questions_by_ratio(
     # 摘要：统计各题型选中数量
     summary: list[schemas.SmartPracticeSelectionItem] = []
     for qtype in selected_types:
-        total = len([q for q in final_list if q.type == qtype])
+        counts_by_level: dict[int, int] = {}
+        for q in final_list:
+            if q.type != qtype:
+                continue
+            counts_by_level[q.practice_count] = counts_by_level.get(q.practice_count, 0) + 1
+        total = sum(counts_by_level.values())
         summary.append(
             schemas.SmartPracticeSelectionItem(
                 type=qtype,
                 count_min=total,
                 count_next=0,
+                count_by_level=counts_by_level,
             )
         )
 

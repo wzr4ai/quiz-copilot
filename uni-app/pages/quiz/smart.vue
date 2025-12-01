@@ -734,9 +734,14 @@ const formatType = (type) => {
 const handleSelectionSummary = (groupData) => {
   selectionSummary.value = groupData.selection_summary || []
   if (!selectionSummary.value.length) return
-  const lines = selectionSummary.value.map(
-    (item) => `${formatType(item.type)}：计数最小 ${item.count_min} 题${item.count_next ? `，次低计数 ${item.count_next} 题` : ''}`
-  )
+  const lines = selectionSummary.value.map((item) => {
+    const levelPairs = Object.keys(item.count_by_level || {})
+      .map((k) => Number(k))
+      .sort((a, b) => a - b)
+      .map((level) => `计数 ${level}：${item.count_by_level[level]} 题`)
+    const levelText = levelPairs.length ? levelPairs.join('，') : `计数最小 ${item.count_min} 题`
+    return `${formatType(item.type)}：${levelText}`
+  })
   uni.showModal({
     title: '抽题结果',
     content: lines.join('\n'),

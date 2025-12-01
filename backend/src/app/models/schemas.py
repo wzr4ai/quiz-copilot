@@ -222,6 +222,7 @@ class SmartPracticeSelectionItem(BaseModel):
     type: str
     count_min: int
     count_next: int
+    count_by_level: dict[int, int] = Field(default_factory=dict)
 
 
 class SmartPracticeGroup(BaseModel):
