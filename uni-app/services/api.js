@@ -1,4 +1,4 @@
-const API_BASE = 'https://fnos.dfwzr.com:8232/api/v1'
+const API_BASE = 'https://fnos.dfwzr.com:8233/api/v1'
 //const API_BASE = 'http://10.10.10.22:8001/api/v1'
 // 硬编码环境为 dev，如需放开注册可改为 'prod' 或空字符串
 const APP_ENV = 'dev'

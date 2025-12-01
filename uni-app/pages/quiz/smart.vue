@@ -479,12 +479,41 @@ const handleNext = async () => {
   await completeGroup()
 }
 
+const buildRoundCountSummary = () => {
+  const summary = { promoted: 0, resetToZero: 0 }
+  if (!group.value?.questions?.length) return summary
+  group.value.questions.forEach((q) => {
+    const fb = feedback[q.id]
+    if (!fb) return
+    if (fb.counted) summary.promoted += 1
+    if (fb.is_correct === false) summary.resetToZero += 1
+  })
+  return summary
+}
+
+const confirmReinforceTransition = (summary) =>
+  new Promise((resolve) => {
+    uni.showModal({
+      title: '进入强化模式',
+      content: `经过本轮刷题，计数由 n 升至 n+1 的题目：${summary.promoted} 题\n计数降为 0 的题目：${summary.resetToZero} 题\n确认进入强化模式吗？`,
+      confirmText: '进入强化',
+      cancelText: '再检查一下',
+      success: (res) => resolve(!!res.confirm),
+    })
+  })
+
 const completeGroup = async () => {
   if (!sessionId.value) return
   await flushCurrentAnswer()
   const missing = (group.value?.questions || []).find((q) => !answers[q.id])
   if (missing) {
     return uni.showToast({ title: '还有未作答题目', icon: 'none' })
+  }
+  const summary = buildRoundCountSummary()
+  const shouldConfirmReinforce = group.value?.mode === 'normal' && summary.resetToZero > 0
+  if (shouldConfirmReinforce) {
+    const confirmed = await confirmReinforceTransition(summary)
+    if (!confirmed) return
   }
   jumping.value = true
   try {
@@ -677,11 +706,13 @@ onUnload(async () => {
 <style>
 .page {
   padding: 24rpx;
+  padding-bottom: 200rpx;
   display: flex;
   flex-direction: column;
   gap: 20rpx;
   background: #f8fafc;
   min-height: 100vh;
+  touch-action: manipulation;
 }
 
 .card {
@@ -956,10 +987,17 @@ onUnload(async () => {
 }
 
 .footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 14rpx 24rpx 24rpx;
+  background: rgba(248, 250, 252, 0.98);
+  box-shadow: 0 -8rpx 24rpx rgba(15, 23, 42, 0.08);
+  z-index: 10;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10rpx;
-  margin-top: 12rpx;
 }
 
 .primary {
