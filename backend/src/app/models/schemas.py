@@ -214,6 +214,7 @@ class SmartPracticeQuestion(BaseModel):
     standard_answer: Optional[str] = None
     user_answer: Optional[str] = None
     is_correct: Optional[bool] = None
+    practice_count: Optional[int] = None
 
 
 class SmartPracticeSelectionItem(BaseModel):

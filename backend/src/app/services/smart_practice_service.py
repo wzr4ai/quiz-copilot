@@ -252,18 +252,19 @@ def _serialize_group(
     question_map: list[schemas.SmartPracticeQuestion] = []
     for q in questions:
         answer = answers.get(q.id)
-        question_map.append(
-            schemas.SmartPracticeQuestion(
-                id=q.id,
-                content=q.content,
-                type=q.type,
-                options=[schemas.Option(**opt) for opt in q.options or []],
-                analysis=q.analysis,
-                standard_answer=q.standard_answer,
-                user_answer=answer.user_answer if answer else None,
-                is_correct=answer.is_correct if answer else None,
+            question_map.append(
+                schemas.SmartPracticeQuestion(
+                    id=q.id,
+                    content=q.content,
+                    type=q.type,
+                    options=[schemas.Option(**opt) for opt in q.options or []],
+                    analysis=q.analysis,
+                    standard_answer=q.standard_answer,
+                    user_answer=answer.user_answer if answer else None,
+                    is_correct=answer.is_correct if answer else None,
+                    practice_count=q.practice_count,
+                )
             )
-        )
     return schemas.SmartPracticeGroup(
         session_id=sp_session.id,
         group_id=group.id,

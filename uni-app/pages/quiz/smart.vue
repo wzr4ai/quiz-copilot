@@ -205,6 +205,7 @@ const answers = reactive({})
 const multiSelections = reactive({})
 const feedback = reactive({})
 const locked = reactive({})
+const initialCounts = reactive({})
 const editForm = reactive({
   id: null,
   content: '',
@@ -330,8 +331,10 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(multiSelections).forEach((k) => delete multiSelections[k])
   Object.keys(feedback).forEach((k) => delete feedback[k])
   Object.keys(locked).forEach((k) => delete locked[k])
+  Object.keys(initialCounts).forEach((k) => delete initialCounts[k])
   const isReinforce = group.value?.mode === 'reinforce'
   questions.forEach((q) => {
+    initialCounts[q.id] = typeof q.practice_count === 'number' ? q.practice_count : 0
     const ua = isReinforce ? '' : q.user_answer || ''
     answers[q.id] = ua
     if (q.type === 'choice_multi') {
@@ -480,27 +483,73 @@ const handleNext = async () => {
 }
 
 const buildRoundCountSummary = () => {
-  const summary = { promoted: 0, resetToZero: 0 }
+  const summary = {
+    increments: {},
+    drops: {},
+    stayZero: 0,
+    hasWrong: false,
+  }
   if (!group.value?.questions?.length) return summary
   group.value.questions.forEach((q) => {
     const fb = feedback[q.id]
-    if (!fb) return
-    if (fb.counted) summary.promoted += 1
-    if (fb.is_correct === false) summary.resetToZero += 1
+    const initial = typeof initialCounts[q.id] === 'number' ? initialCounts[q.id] : 0
+    let nextCount = initial
+    if (fb?.is_correct === false) {
+      nextCount = 0
+      summary.hasWrong = true
+    } else if (fb?.counted) {
+      nextCount = initial + 1
+    }
+    if (fb?.counted) {
+      summary.increments[initial] = (summary.increments[initial] || 0) + 1
+    }
+    if (fb?.is_correct === false && initial > 0) {
+      summary.drops[initial] = (summary.drops[initial] || 0) + 1
+    }
+    if (initial === 0 && nextCount === 0) {
+      summary.stayZero += 1
+    }
   })
   return summary
 }
 
-const confirmReinforceTransition = (summary) =>
+const confirmReinforceTransition = (summaryText) =>
   new Promise((resolve) => {
     uni.showModal({
       title: '进入强化模式',
-      content: `经过本轮刷题，计数由 n 升至 n+1 的题目：${summary.promoted} 题\n计数降为 0 的题目：${summary.resetToZero} 题\n确认进入强化模式吗？`,
-      confirmText: '进入强化',
-      cancelText: '再检查一下',
-      success: (res) => resolve(!!res.confirm),
+      content: summaryText,
+      showCancel: false,
+      confirmText: '确认进入强化',
+      success: () => resolve(true),
+      fail: () => resolve(false),
     })
   })
+
+const formatSummaryText = (summary) => {
+  const parts = []
+  const incEntries = Object.keys(summary.increments)
+    .map((k) => Number(k))
+    .sort((a, b) => a - b)
+    .map((from) => `${from}->${from + 1}：${summary.increments[from]} 题`)
+  if (incEntries.length) {
+    parts.push(`计数上升：${incEntries.join('，')}`)
+  }
+
+  const dropEntries = Object.keys(summary.drops)
+    .map((k) => Number(k))
+    .sort((a, b) => a - b)
+    .map((from) => `${from}->0：${summary.drops[from]} 题`)
+  if (dropEntries.length) {
+    parts.push(`计数归零：${dropEntries.join('，')}`)
+  }
+  if (summary.stayZero) {
+    parts.push(`保持为 0：${summary.stayZero} 题`)
+  }
+  if (!parts.length) {
+    parts.push('本轮未产生计数变化')
+  }
+  return parts.join('\n')
+}
 
 const completeGroup = async () => {
   if (!sessionId.value) return
@@ -510,9 +559,10 @@ const completeGroup = async () => {
     return uni.showToast({ title: '还有未作答题目', icon: 'none' })
   }
   const summary = buildRoundCountSummary()
-  const shouldConfirmReinforce = group.value?.mode === 'normal' && summary.resetToZero > 0
+  const shouldConfirmReinforce = group.value?.mode === 'normal' && summary.hasWrong
   if (shouldConfirmReinforce) {
-    const confirmed = await confirmReinforceTransition(summary)
+    const summaryText = formatSummaryText(summary)
+    const confirmed = await confirmReinforceTransition(summaryText)
     if (!confirmed) return
   }
   jumping.value = true
