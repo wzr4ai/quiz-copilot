@@ -334,15 +334,14 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(locked).forEach((k) => delete locked[k])
   Object.keys(initialCounts).forEach((k) => delete initialCounts[k])
   Object.keys(everWrong).forEach((k) => delete everWrong[k])
-  const isReinforce = group.value?.mode === 'reinforce'
   questions.forEach((q) => {
     initialCounts[q.id] = typeof q.practice_count === 'number' ? q.practice_count : 0
-    const ua = isReinforce ? '' : q.user_answer || ''
+    const ua = q.user_answer || ''
     answers[q.id] = ua
     if (q.type === 'choice_multi') {
       multiSelections[q.id] = ua ? ua.split(',') : []
     }
-    if (!isReinforce && group.value?.realtime_analysis && ua) {
+    if (group.value?.realtime_analysis && ua) {
       locked[q.id] = true
       feedback[q.id] = {
         is_correct: q.is_correct,
