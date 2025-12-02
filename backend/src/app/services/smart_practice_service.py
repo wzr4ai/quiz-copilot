@@ -261,8 +261,9 @@ def _serialize_group(
                 counted=answer.counted if answer else None,
             )
         )
-    # 动态根据当前抽题范围计算剩余 0 次计数的题目数量
-    resolved_banks = _resolve_bank_ids_for_draw(db, sp_session.settings_snapshot.get("bank_ids", []), current_user)
+    # 动态根据当前抽题范围计算剩余 0 次计数的题目数量（优先使用用户选择的题库）
+    selected_bank_ids = sp_session.settings_snapshot.get("bank_ids", [])
+    resolved_banks = selected_bank_ids if selected_bank_ids else _resolve_bank_ids_for_draw(db, selected_bank_ids, current_user)
     computed_lowest = _compute_lowest_count_remaining(db, resolved_banks) if resolved_banks else None
     return schemas.SmartPracticeGroup(
         session_id=sp_session.id,
@@ -431,13 +432,12 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         total_correct = len([a for a in answered.values() if a.is_correct])
         total_wrong = len([a for a in answered.values() if not a.is_correct])
         reinforce_remaining = pending_wrong if active.status == "reinforce" else None
-        # 统计当前设置题库下题目的计数分布
+        # 统计当前设置题库下题目的计数分布（仅使用用户选择的题库）
         selected_bank_ids = active.settings_snapshot.get("bank_ids", [])
-        stats_bank_ids = selected_bank_ids or _resolve_bank_ids_for_draw(db, selected_bank_ids, user)
-        if stats_bank_ids:
+        if selected_bank_ids:
             stats_rows = db.exec(
                 select(Question.practice_count)
-                .where(Question.bank_id.in_(stats_bank_ids))
+                .where(Question.bank_id.in_(selected_bank_ids))
                 .order_by(Question.practice_count)
             ).all()
             buckets: dict[int, int] = {}
@@ -445,9 +445,9 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
                 cnt = row[0] if isinstance(row, tuple) else row
                 buckets[cnt] = buckets.get(cnt, 0) + 1
             practice_count_stats = buckets
-            lowest_count_remaining = _compute_lowest_count_remaining(db, stats_bank_ids)
+            lowest_count_remaining = _compute_lowest_count_remaining(db, selected_bank_ids)
             # 分题库统计（仅展示用户已选题库）
-            banks = db.exec(select(Bank).where(Bank.id.in_(selected_bank_ids))).all() if selected_bank_ids else []
+            banks = db.exec(select(Bank).where(Bank.id.in_(selected_bank_ids))).all()
             bank_title_map = {b.id: b.title for b in banks}
             per_bank_stats = []
             for bid in selected_bank_ids:
