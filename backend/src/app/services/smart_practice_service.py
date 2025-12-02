@@ -23,7 +23,7 @@ from app.models.db_models import (
     User,
 )
 
-# 开关：是否尊重用户所选题库，仅从中抽题 若为 False，则从所有可访问题库抽题
+# 开关：是否尊重用户所选题库，仅从中抽题 若为 False，则从所有可访问题库中抽题
 USE_SELECTED_BANKS_FOR_SMART_PRACTICE = True # Temporary: False means draw from all accessible banks
 
 
