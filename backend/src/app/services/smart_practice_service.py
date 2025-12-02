@@ -24,7 +24,7 @@ from app.models.db_models import (
 )
 
 # 开关：是否尊重用户所选题库，仅从中抽题 若为 False，则从所有可访问题库抽题
-USE_SELECTED_BANKS_FOR_SMART_PRACTICE = False  # Temporary: False means draw from all accessible banks
+USE_SELECTED_BANKS_FOR_SMART_PRACTICE = True # Temporary: False means draw from all accessible banks
 
 
 def _normalize_answer(val: str, qtype: str) -> str:
@@ -227,6 +227,7 @@ def _serialize_group(
     group: SmartPracticeGroup,
     questions: Iterable[Question],
     sp_session: SmartPracticeSession,
+    current_user: User,
     selection_summary: list[schemas.SmartPracticeSelectionItem] | None = None,
 ) -> schemas.SmartPracticeGroup:
     realtime = sp_session.realtime_analysis
@@ -260,6 +261,9 @@ def _serialize_group(
                 counted=answer.counted if answer else None,
             )
         )
+    # 动态根据当前抽题范围计算剩余 0 次计数的题目数量
+    resolved_banks = _resolve_bank_ids_for_draw(db, sp_session.settings_snapshot.get("bank_ids", []), current_user)
+    computed_lowest = _compute_lowest_count_remaining(db, resolved_banks) if resolved_banks else None
     return schemas.SmartPracticeGroup(
         session_id=sp_session.id,
         group_id=group.id,
@@ -269,7 +273,7 @@ def _serialize_group(
         total_questions=group.total_questions,
         realtime_analysis=realtime,
         current_question_index=sp_session.current_question_index,
-        lowest_count_remaining=sp_session.lowest_count_remaining,
+        lowest_count_remaining=computed_lowest if computed_lowest is not None else sp_session.lowest_count_remaining,
         selection_summary=selection_summary,
         questions=question_map,
     )
@@ -363,7 +367,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     db.commit()
     db.refresh(sp_session)
     db.refresh(group)
-    return _serialize_group(db, group, selected, sp_session, selection_summary=summary)
+    return _serialize_group(db, group, selected, sp_session, user, selection_summary=summary)
 
 
 def get_current_group(db: Session, session_id: str, user: User) -> schemas.SmartPracticeGroup:
@@ -372,7 +376,7 @@ def get_current_group(db: Session, session_id: str, user: User) -> schemas.Smart
         raise HTTPException(status_code=404, detail="智能刷题会话不存在")
     group = _get_current_group(db, sp_session)
     questions = _get_questions_for_group(db, group)
-    return _serialize_group(db, group, questions, sp_session)
+    return _serialize_group(db, group, questions, sp_session, user)
 
 
 def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
@@ -399,6 +403,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
     total_wrong = None
     reinforce_remaining = None
     practice_count_stats = None
+    lowest_count_remaining = None
     if current_group:
         item_question_ids = {
             item.question_id
@@ -438,6 +443,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
                 cnt = row[0] if isinstance(row, tuple) else row
                 buckets[cnt] = buckets.get(cnt, 0) + 1
             practice_count_stats = buckets
+            lowest_count_remaining = _compute_lowest_count_remaining(db, bank_ids)
 
     return schemas.SmartPracticeStatus(
         has_active=True,
@@ -452,7 +458,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         total_wrong=total_wrong,
         reinforce_remaining=reinforce_remaining,
         practice_count_stats=practice_count_stats,
-        lowest_count_remaining=active.lowest_count_remaining,
+        lowest_count_remaining=lowest_count_remaining if lowest_count_remaining is not None else active.lowest_count_remaining,
     )
 
 
@@ -760,7 +766,14 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
     db.add(sp_session)
     db.commit()
     db.refresh(group)
-    return _serialize_group(db, group, questions, sp_session, selection_summary=summary if mode == "normal" else None)
+    return _serialize_group(
+        db,
+        group,
+        questions,
+        sp_session,
+        user,
+        selection_summary=summary if mode == "normal" else None,
+    )
 
 
 def finish_session(db: Session, session_id: str, user: User) -> None:
