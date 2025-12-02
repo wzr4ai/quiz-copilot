@@ -196,36 +196,33 @@ def _sanitize_jsonish(text: str) -> str:
     return _QUOTE_BETWEEN_CHARS.sub("”", collapsed)
 
 
-async def _call_gemini_text(prompt: str, text: str, model: str) -> str:
-    api_key = settings.gemini_api_key
-    if not api_key:
-        raise AIServiceError("Gemini API key 未配置 (.env 中设置 GEMINI_API_KEY)")
-    url = f"{settings.gemini_api_base.rstrip('/')}/v1beta/models/{model}:generateContent?key={api_key}"
-    payload = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": prompt},
-                    {"text": f"原始文本：\n{text}"},
-                ]
-            }
-        ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "maxOutputTokens": 8192,
-            "response_mime_type": "application/json",
-        },
-    }
-    async with httpx.AsyncClient(timeout=settings.gemini_request_timeout) as client:
-        resp = await client.post(url, json=payload)
-        resp.raise_for_status()
-    data = resp.json()
-    for candidate in data.get("candidates", []):
-        for part in candidate.get("content", {}).get("parts", []):
-            text_part = part.get("text")
-            if text_part:
-                return text_part
-    raise AIServiceError("Gemini 未返回可用文本")
+def _repair_jsonish_array(text: str) -> list | None:
+    """Attempt to auto-close brackets/braces and drop trailing commas."""
+    if "[" not in text:
+        return None
+    candidate = text[text.find("[") :]
+    candidate = re.sub(r",\s*([}\]])", r"\1", candidate)
+    stack: list[str] = []
+    repaired_chars: list[str] = []
+    for ch in candidate:
+        if ch in "[{":
+            stack.append(ch)
+            repaired_chars.append(ch)
+        elif ch in "]}":
+            if stack and ((stack[-1] == "[" and ch == "]") or (stack[-1] == "{" and ch == "}")):
+                stack.pop()
+                repaired_chars.append(ch)
+            else:
+                continue
+        else:
+            repaired_chars.append(ch)
+    for open_ch in reversed(stack):
+        repaired_chars.append("]" if open_ch == "[" else "}")
+    fixed = "".join(repaired_chars)
+    try:
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        return None
 
 
 async def _call_gemini_text(prompt: str, text: str, model: str, api_key: str | None = None, base_url: str | None = None) -> str:
@@ -320,7 +317,7 @@ async def parse_chunk_with_ai(
                 try:
                     payload = json.loads(sanitized)
                 except json.JSONDecodeError:
-                    payload = _extract_json_array(sanitized)
+                    payload = _extract_json_array(sanitized) or _repair_jsonish_array(sanitized)
                 if payload is None:
                     raise
             questions: List[QuestionCreate] = []

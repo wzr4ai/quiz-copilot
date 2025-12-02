@@ -835,6 +835,7 @@ def reset_user_state(db: Session, user: User) -> None:
     if group_ids:
         db.exec(delete(SmartPracticeItem).where(SmartPracticeItem.group_id.in_(group_ids)))
         db.exec(delete(SmartPracticeGroup).where(SmartPracticeGroup.id.in_(group_ids)))
+    db.exec(delete(SmartPracticeFeedback).where(SmartPracticeFeedback.session_id.in_(session_ids)))
     db.exec(delete(SmartPracticeAnswer).where(SmartPracticeAnswer.session_id.in_(session_ids)))
     db.exec(delete(SmartPracticeSession).where(SmartPracticeSession.id.in_(session_ids)))
     db.commit()
