@@ -55,41 +55,6 @@
           </view>
         </view>
       </view>
-      <view class="stats-panel" v-if="status.has_active">
-        <view class="stat-item">
-          <text class="stat-label">已答</text>
-          <text class="stat-value">{{ status.total_answered ?? '-' }}</text>
-        </view>
-        <view class="stat-item ok">
-          <text class="stat-label">正确</text>
-          <text class="stat-value">{{ status.total_correct ?? '-' }}</text>
-        </view>
-        <view class="stat-item bad">
-          <text class="stat-label">错误/未答</text>
-          <text class="stat-value">{{ status.total_wrong ?? '-' }}</text>
-        </view>
-        <view class="stat-item">
-          <text class="stat-label">待刷</text>
-          <text class="stat-value">{{ remainingLabel }}</text>
-        </view>
-      </view>
-      <view v-if="perBankStats.length" class="bank-stats">
-        <view class="bank-row" v-for="bank in perBankStats" :key="bank.bank_id">
-          <view class="bank-head">
-            <text class="bank-title">{{ bank.title }}</text>
-            <text class="bank-sub">待刷 0 计数：{{ bank.lowest_count_remaining ?? 0 }}</text>
-          </view>
-          <view class="bucket-row" v-if="bank.practice_count_stats && Object.keys(bank.practice_count_stats).length">
-            <view
-              class="bucket-chip"
-              v-for="level in Object.keys(bank.practice_count_stats).map(Number).sort((a, b) => a - b)"
-              :key="`${bank.bank_id}-${level}`"
-            >
-              计数 {{ level }}：{{ bank.practice_count_stats[level] }}
-            </view>
-          </view>
-        </view>
-      </view>
 
         <view v-if="currentQuestion" class="question-card">
           <view class="question-head">
@@ -357,7 +322,6 @@ const loadStatus = async () => {
     Object.assign(status, {
       ...status,
       ...res,
-      per_bank_stats: res.per_bank_stats || [],
       lowest_count_remaining: res.lowest_count_remaining,
     })
     if (res.has_active && res.session_id) {
@@ -886,80 +850,6 @@ onUnload(async () => {
   align-items: center;
   gap: 10rpx;
 }
-.stats-panel {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10rpx;
-  margin: 10rpx 0 14rpx;
-  background: #f8fafc;
-  border-radius: 12rpx;
-  padding: 12rpx;
-}
-.stat-item {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-  padding: 10rpx;
-  border-radius: 10rpx;
-  background: #fff;
-  box-shadow: 0 2rpx 8rpx rgba(15, 23, 42, 0.04);
-}
-.stat-label {
-  font-size: 24rpx;
-  color: #64748b;
-}
-.stat-value {
-  font-size: 32rpx;
-  font-weight: 600;
-  color: #0f172a;
-}
-.stat-item.ok .stat-value {
-  color: #16a34a;
-}
-.stat-item.bad .stat-value {
-  color: #dc2626;
-}
-.bank-stats {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  margin-bottom: 12rpx;
-}
-.bank-row {
-  border: 1px solid #e2e8f0;
-  border-radius: 12rpx;
-  padding: 12rpx;
-  background: #fdfdfd;
-}
-.bank-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8rpx;
-  margin-bottom: 8rpx;
-}
-.bank-title {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: #0f172a;
-}
-.bank-sub {
-  font-size: 24rpx;
-  color: #475569;
-}
-.bucket-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8rpx;
-}
-.bucket-chip {
-  background: #e2e8f0;
-  color: #0f172a;
-  padding: 6rpx 10rpx;
-  border-radius: 999rpx;
-  font-size: 22rpx;
-}
-
 .title {
   font-size: 32rpx;
   font-weight: 700;

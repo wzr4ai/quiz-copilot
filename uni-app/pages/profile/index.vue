@@ -67,9 +67,23 @@
 					当前轮最低计数剩余：{{ smartStatus.lowest_count_remaining }}
 				</text>
 				<view v-if="practiceStatsList.length" class="stats-list">
-					<text class="hint">题目计数分布：</text>
+					<text class="hint">全局计数分布：</text>
 					<view v-for="item in practiceStatsList" :key="item.count" class="stat-row">
 						<text class="hint">计数 {{ item.count }}：{{ item.total }} 题</text>
+					</view>
+				</view>
+				<view v-if="perBankStatsList.length" class="bank-list">
+					<text class="hint">按题库分布：</text>
+					<view class="bank-card" v-for="bank in perBankStatsList" :key="bank.bank_id">
+						<view class="bank-head">
+							<text class="bank-title">{{ bank.title }}</text>
+							<text class="bank-sub">待刷(计数0)：{{ bank.lowest_count_remaining ?? 0 }}</text>
+						</view>
+						<view class="bank-buckets" v-if="bank.practice_count_stats && bank.keys.length">
+							<view class="bucket-chip" v-for="level in bank.keys" :key="`${bank.bank_id}-${level}`">
+								计数 {{ level }}：{{ bank.practice_count_stats[level] }}
+							</view>
+						</view>
 					</view>
 				</view>
 			</view>
@@ -107,6 +121,7 @@ const role = ref(getRole() || '')
 const loading = ref(false)
 const smartStatus = ref(null)
 const practiceStatsList = ref([])
+const perBankStatsList = ref([])
 const statsLoading = ref(false)
 const smartStatusLabel = computed(() => {
   if (!smartStatus.value || !smartStatus.value.has_active) return '未开始'
@@ -187,6 +202,7 @@ const loadSmartStatus = async () => {
   if (!getToken()) {
     smartStatus.value = null
     practiceStatsList.value = []
+    perBankStatsList.value = []
     statsLoading.value = false
     return
   }
@@ -196,9 +212,17 @@ const loadSmartStatus = async () => {
     practiceStatsList.value = Object.keys(stats)
       .map((k) => ({ count: Number(k), total: stats[k] }))
       .sort((a, b) => a.count - b.count)
+    const perBank = smartStatus.value?.per_bank_stats || []
+    perBankStatsList.value = perBank.map((bank) => {
+      const keys = Object.keys(bank.practice_count_stats || {})
+        .map((k) => Number(k))
+        .sort((a, b) => a - b)
+      return { ...bank, keys }
+    })
   } catch (err) {
     smartStatus.value = null
     practiceStatsList.value = []
+    perBankStatsList.value = []
   } finally {
     statsLoading.value = false
   }
@@ -346,6 +370,53 @@ onShow(() => {
 	margin-top: 6rpx;
 	color: #64748b;
 	font-size: 24rpx;
+}
+
+.stats-list {
+	margin-top: 8rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 4rpx;
+}
+.bank-list {
+	margin-top: 12rpx;
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+.bank-card {
+	border: 1rpx solid #e2e8f0;
+	border-radius: 12rpx;
+	padding: 12rpx;
+	background: #f8fafc;
+}
+.bank-head {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8rpx;
+	margin-bottom: 6rpx;
+}
+.bank-title {
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #0f172a;
+}
+.bank-sub {
+	font-size: 24rpx;
+	color: #475569;
+}
+.bank-buckets {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8rpx;
+}
+.bucket-chip {
+	background: #e2e8f0;
+	color: #0f172a;
+	padding: 6rpx 10rpx;
+	border-radius: 999rpx;
+	font-size: 22rpx;
 }
 
 .list {
