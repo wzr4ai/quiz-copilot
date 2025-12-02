@@ -23,6 +23,9 @@ from app.models.db_models import (
     User,
 )
 
+# 开关：是否尊重用户所选题库，仅从中抽题 若为 False，则从所有可访问题库抽题
+USE_SELECTED_BANKS_FOR_SMART_PRACTICE = False  # Temporary: False means draw from all accessible banks
+
 
 def _normalize_answer(val: str, qtype: str) -> str:
     if qtype == "choice_multi":
@@ -47,6 +50,17 @@ def _ensure_banks_accessible(db: Session, bank_ids: list[int], current_user: Use
             raise HTTPException(status_code=403, detail=f"无权访问题库 {bank_id}")
         banks.append(bank)
     return banks
+
+
+def _resolve_bank_ids_for_draw(db: Session, requested_bank_ids: list[int], current_user: User) -> list[int]:
+    """Return bank ids to use for drawing questions. Toggle global to respect user selection."""
+    if USE_SELECTED_BANKS_FOR_SMART_PRACTICE:
+        return requested_bank_ids
+    query = select(Bank.id)
+    if current_user.role != "admin":
+        query = query.where(Bank.is_public.is_(True))
+    rows = db.exec(query).all()
+    return [row[0] if isinstance(row, tuple) else row for row in rows]
 
 
 def _load_questions(db: Session, bank_ids: list[int], current_user: User) -> list[Question]:
@@ -316,7 +330,11 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     if active and active.status in {"in_progress", "reinforce"}:
         raise HTTPException(status_code=409, detail="已有进行中的智能刷题，请先完成或继续当前刷题")
 
-    questions = _load_questions(db, settings.bank_ids, user)
+    effective_bank_ids = _resolve_bank_ids_for_draw(db, settings.bank_ids, user)
+    if not effective_bank_ids:
+        raise HTTPException(status_code=400, detail="暂无可用题库")
+
+    questions = _load_questions(db, effective_bank_ids, user)
     if not questions:
         raise HTTPException(status_code=400, detail="所选题库暂无可用题目")
     selected, summary = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
@@ -325,7 +343,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
 
     now = datetime.utcnow()
     snapshot = settings.model_dump(exclude={"created_at", "updated_at", "id"})
-    lowest_remaining = _compute_lowest_count_remaining(db, settings.bank_ids)
+    lowest_remaining = _compute_lowest_count_remaining(db, effective_bank_ids)
     sp_session = SmartPracticeSession(
         id=str(uuid4()),
         user_id=user.id,
@@ -408,7 +426,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         total_wrong = len([a for a in answered.values() if not a.is_correct])
         reinforce_remaining = pending_wrong if active.status == "reinforce" else None
         # 统计当前设置题库下题目的计数分布
-        bank_ids = active.settings_snapshot.get("bank_ids", [])
+        bank_ids = _resolve_bank_ids_for_draw(db, active.settings_snapshot.get("bank_ids", []), user)
         if bank_ids:
             stats_rows = db.exec(
                 select(Question.practice_count)
@@ -714,8 +732,13 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
         if current_group.mode in {"reinforce", "normal"}:
             sp_session.round += 1
         sp_session.status = "in_progress"
-        questions = _load_questions(
+        effective_bank_ids = _resolve_bank_ids_for_draw(
             db, sp_session.settings_snapshot.get("bank_ids", []), user  # type: ignore[arg-type]
+        )
+        if not effective_bank_ids:
+            raise HTTPException(status_code=400, detail="暂无可用题库")
+        questions = _load_questions(
+            db, effective_bank_ids, user  # type: ignore[arg-type]
         )
         prefer_lowest = sp_session.round > 1
         selected, summary = _select_questions_by_ratio(
@@ -727,7 +750,7 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
             raise HTTPException(status_code=400, detail="题库题目不足，无法生成新题组")
         questions = selected
         sp_session.lowest_count_remaining = _compute_lowest_count_remaining(
-            db, sp_session.settings_snapshot.get("bank_ids", [])
+            db, effective_bank_ids
         )
 
     group = _build_group(db, sp_session, questions, mode=mode, group_index=group_index)
