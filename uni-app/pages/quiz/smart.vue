@@ -399,8 +399,17 @@ const startSmart = async () => {
   if (!form.bankIds.length) {
     return uni.showToast({ title: '请至少选择一个题库', icon: 'none' })
   }
+  if (ratioTotal.value !== 100 && ratioTotal.value !== 0) {
+    return uni.showToast({ title: '题型占比需合计 100%（或留空）', icon: 'none' })
+  }
   starting.value = true
   try {
+    await saveSmartPracticeSettings({
+      bank_ids: form.bankIds,
+      target_count: form.targetCount || 50,
+      type_ratio: form.typeRatio,
+      realtime_analysis: form.realtimeAnalysis,
+    })
     const res = await startSmartPracticeSession()
     sessionId.value = res.session_id
     group.value = { ...res, realtime_analysis: true }

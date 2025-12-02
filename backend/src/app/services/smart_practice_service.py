@@ -432,11 +432,12 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         total_wrong = len([a for a in answered.values() if not a.is_correct])
         reinforce_remaining = pending_wrong if active.status == "reinforce" else None
         # 统计当前设置题库下题目的计数分布
-        bank_ids = _resolve_bank_ids_for_draw(db, active.settings_snapshot.get("bank_ids", []), user)
-        if bank_ids:
+        selected_bank_ids = active.settings_snapshot.get("bank_ids", [])
+        stats_bank_ids = selected_bank_ids or _resolve_bank_ids_for_draw(db, selected_bank_ids, user)
+        if stats_bank_ids:
             stats_rows = db.exec(
                 select(Question.practice_count)
-                .where(Question.bank_id.in_(bank_ids))
+                .where(Question.bank_id.in_(stats_bank_ids))
                 .order_by(Question.practice_count)
             ).all()
             buckets: dict[int, int] = {}
@@ -444,12 +445,12 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
                 cnt = row[0] if isinstance(row, tuple) else row
                 buckets[cnt] = buckets.get(cnt, 0) + 1
             practice_count_stats = buckets
-            lowest_count_remaining = _compute_lowest_count_remaining(db, bank_ids)
-            # 分题库统计
-            banks = db.exec(select(Bank).where(Bank.id.in_(bank_ids))).all()
+            lowest_count_remaining = _compute_lowest_count_remaining(db, stats_bank_ids)
+            # 分题库统计（仅展示用户已选题库）
+            banks = db.exec(select(Bank).where(Bank.id.in_(selected_bank_ids))).all() if selected_bank_ids else []
             bank_title_map = {b.id: b.title for b in banks}
             per_bank_stats = []
-            for bid in bank_ids:
+            for bid in selected_bank_ids:
                 bank_rows = db.exec(
                     select(Question.practice_count).where(Question.bank_id == bid).order_by(Question.practice_count)
                 ).all()
