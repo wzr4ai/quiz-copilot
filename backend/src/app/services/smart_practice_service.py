@@ -404,6 +404,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
     reinforce_remaining = None
     practice_count_stats = None
     lowest_count_remaining = None
+    per_bank_stats: list[schemas.SmartPracticeBankStats] | None = None
     if current_group:
         item_question_ids = {
             item.question_id
@@ -444,6 +445,26 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
                 buckets[cnt] = buckets.get(cnt, 0) + 1
             practice_count_stats = buckets
             lowest_count_remaining = _compute_lowest_count_remaining(db, bank_ids)
+            # 分题库统计
+            banks = db.exec(select(Bank).where(Bank.id.in_(bank_ids))).all()
+            bank_title_map = {b.id: b.title for b in banks}
+            per_bank_stats = []
+            for bid in bank_ids:
+                bank_rows = db.exec(
+                    select(Question.practice_count).where(Question.bank_id == bid).order_by(Question.practice_count)
+                ).all()
+                bank_buckets: dict[int, int] = {}
+                for row in bank_rows:
+                    cnt = row[0] if isinstance(row, tuple) else row
+                    bank_buckets[cnt] = bank_buckets.get(cnt, 0) + 1
+                per_bank_stats.append(
+                    schemas.SmartPracticeBankStats(
+                        bank_id=bid,
+                        title=bank_title_map.get(bid, f"题库 {bid}"),
+                        practice_count_stats=bank_buckets,
+                        lowest_count_remaining=bank_buckets.get(0, 0),
+                    )
+                )
 
     return schemas.SmartPracticeStatus(
         has_active=True,
@@ -459,6 +480,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         reinforce_remaining=reinforce_remaining,
         practice_count_stats=practice_count_stats,
         lowest_count_remaining=lowest_count_remaining if lowest_count_remaining is not None else active.lowest_count_remaining,
+        per_bank_stats=per_bank_stats,
     )
 
 

@@ -203,6 +203,14 @@ class SmartPracticeStatus(BaseModel):
     reinforce_remaining: Optional[int] = None
     practice_count_stats: Optional[dict[int, int]] = None
     lowest_count_remaining: Optional[int] = None
+    per_bank_stats: Optional[list["SmartPracticeBankStats"]] = None
+
+
+class SmartPracticeBankStats(BaseModel):
+    bank_id: int
+    title: str
+    practice_count_stats: dict[int, int] = Field(default_factory=dict)
+    lowest_count_remaining: Optional[int] = None
 
 
 class SmartPracticeQuestion(BaseModel):
