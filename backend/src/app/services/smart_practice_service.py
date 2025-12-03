@@ -134,11 +134,12 @@ def _select_questions_by_ratio(
     picked_guaranteed = valid_questions[:guaranteed_quota]
     picked_ids = {q.id for q in picked_guaranteed}
 
-    # 阶段二：加权补位（Efraimidis-Spirakis）
+    # 阶段二：加权补位（Efraimidis-Spirakis），权重 w = 1 / (3^practice_count)
     remaining_pool = [q for q in valid_questions if q.id not in picked_ids]
     scored: list[tuple[float, Question]] = []
     for q in remaining_pool:
-        score = random.random() ** (q.practice_count + 1)
+        # 公式：score = U^(1/w) = U^(3^practice_count)
+        score = random.random() ** (3 ** q.practice_count)
         scored.append((score, q))
     scored.sort(key=lambda x: x[0], reverse=True)
     picked_weighted = [q for _, q in scored[:weighted_quota]]
