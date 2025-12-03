@@ -180,7 +180,6 @@ class QuestionIssueWithQuestion(QuestionIssue):
 class SmartPracticeSettingsPayload(BaseModel):
     bank_ids: List[int] = Field(default_factory=list)
     target_count: int = Field(default=50, ge=1)
-    batch_count: int = Field(default=1, ge=1, description="每次刷题的题组批次数")
     guaranteed_low_count: int = Field(default=20, ge=0, description="每批保底抽取的低计数题数量")
     type_ratio: dict = Field(default_factory=dict)
     realtime_analysis: bool = False

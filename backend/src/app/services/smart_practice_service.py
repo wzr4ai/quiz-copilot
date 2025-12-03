@@ -303,7 +303,6 @@ def save_settings(db: Session, payload: schemas.SmartPracticeSettingsPayload, us
         user_id=user.id,
         bank_ids=payload.bank_ids,
         target_count=payload.target_count,
-        batch_count=payload.batch_count or 1,
         guaranteed_low_count=payload.guaranteed_low_count if payload.guaranteed_low_count is not None else 20,
         type_ratio=payload.type_ratio or {},
         realtime_analysis=True,

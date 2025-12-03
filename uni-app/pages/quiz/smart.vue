@@ -19,10 +19,6 @@
         <input class="input" type="number" v-model.number="form.targetCount" placeholder="默认 50" />
       </view>
       <view class="form-row">
-        <text class="label">批次数量</text>
-        <input class="input" type="number" v-model.number="form.batchCount" placeholder="默认 1" />
-      </view>
-      <view class="form-row">
         <text class="label">保底低计数题数</text>
         <input class="input" type="number" v-model.number="form.guaranteedLowCount" placeholder="默认 20" />
         <text class="hint">每批优先抽取的低计数题目数量。</text>
@@ -194,7 +190,6 @@ const status = reactive({
 const form = reactive({
   bankIds: [],
   targetCount: 50,
-  batchCount: 1,
   guaranteedLowCount: 20,
   realtimeAnalysis: false,
 })
@@ -316,7 +311,6 @@ const loadSettings = async () => {
     if (!res) return
     form.bankIds = res.bank_ids || []
     form.targetCount = res.target_count || 50
-    form.batchCount = res.batch_count || 1
     form.guaranteedLowCount = res.guaranteed_low_count ?? 20
     const ratio = res.type_ratio || {}
     const keys = Object.keys(ratio).filter((k) => ratio[k])
@@ -352,9 +346,6 @@ const saveSettings = async () => {
   if (!selectedTypes.value.length) {
     return uni.showToast({ title: '请至少选择一个题型', icon: 'none' })
   }
-  if (form.batchCount < 1) {
-    return uni.showToast({ title: '批次数量需>=1', icon: 'none' })
-  }
   if (form.guaranteedLowCount < 0) {
     return uni.showToast({ title: '保底低计数题数需>=0', icon: 'none' })
   }
@@ -363,7 +354,6 @@ const saveSettings = async () => {
     await saveSmartPracticeSettings({
       bank_ids: form.bankIds,
       target_count: form.targetCount || 50,
-      batch_count: form.batchCount || 1,
       guaranteed_low_count: form.guaranteedLowCount ?? 20,
       type_ratio: selectedTypes.value.reduce((acc, cur) => {
         acc[cur] = 1
@@ -425,9 +415,6 @@ const startSmart = async () => {
   if (!selectedTypes.value.length) {
     return uni.showToast({ title: '请至少选择一个题型', icon: 'none' })
   }
-  if (form.batchCount < 1) {
-    return uni.showToast({ title: '批次数量需>=1', icon: 'none' })
-  }
   if (form.guaranteedLowCount < 0) {
     return uni.showToast({ title: '保底低计数题数需>=0', icon: 'none' })
   }
@@ -436,7 +423,6 @@ const startSmart = async () => {
     await saveSmartPracticeSettings({
       bank_ids: form.bankIds,
       target_count: form.targetCount || 50,
-      batch_count: form.batchCount || 1,
       guaranteed_low_count: form.guaranteedLowCount ?? 20,
       type_ratio: selectedTypes.value.reduce((acc, cur) => {
         acc[cur] = 1
