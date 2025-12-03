@@ -86,6 +86,8 @@ class SmartPracticeSettings(SQLModel, table=True):
     user_id: int = Field(foreign_key="user.id", index=True)
     bank_ids: list[int] = Field(default_factory=list, sa_column=Column(JSON))
     target_count: int = Field(default=50, description="每组题目数量")
+    batch_count: int = Field(default=1, description="本次刷题的批次数量")
+    guaranteed_low_count: int = Field(default=20, description="每批保底抽取的低计数题数量")
     type_ratio: dict = Field(default_factory=dict, sa_column=Column(JSON))
     realtime_analysis: bool = Field(default=False)
     updated_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)

@@ -114,7 +114,7 @@ def _allocate_target_per_type(types: list[str], target_count: int, type_ratio: d
 
 
 def _select_questions_by_ratio(
-    questions: list[Question], target_count: int, type_ratio: dict
+    questions: list[Question], target_count: int, type_ratio: dict, guaranteed_low_count: int | None = None
 ) -> tuple[list[Question], list[schemas.SmartPracticeSelectionItem]]:
     if not questions:
         return [], []
@@ -125,7 +125,7 @@ def _select_questions_by_ratio(
     if not valid_questions:
         return [], []
 
-    guaranteed_quota = min(20, target_count)
+    guaranteed_quota = min(guaranteed_low_count if guaranteed_low_count is not None else 20, target_count)
     weighted_quota = max(0, target_count - guaranteed_quota)
 
     # 阶段一：全局绝对保底
@@ -303,6 +303,8 @@ def save_settings(db: Session, payload: schemas.SmartPracticeSettingsPayload, us
         user_id=user.id,
         bank_ids=payload.bank_ids,
         target_count=payload.target_count,
+        batch_count=payload.batch_count or 1,
+        guaranteed_low_count=payload.guaranteed_low_count if payload.guaranteed_low_count is not None else 20,
         type_ratio=payload.type_ratio or {},
         realtime_analysis=True,
         created_at=now,
@@ -344,7 +346,9 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
     questions = _load_questions(db, effective_bank_ids, user)
     if not questions:
         raise HTTPException(status_code=400, detail="所选题库暂无可用题目")
-    selected, summary = _select_questions_by_ratio(questions, settings.target_count, settings.type_ratio)
+    selected, summary = _select_questions_by_ratio(
+        questions, settings.target_count, settings.type_ratio, settings.guaranteed_low_count
+    )
     if not selected:
         raise HTTPException(status_code=400, detail="无法生成题组，题库题目数量不足")
 
@@ -788,6 +792,7 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
             questions,
             sp_session.settings_snapshot.get("target_count", 50),
             sp_session.settings_snapshot.get("type_ratio", {}),
+            sp_session.settings_snapshot.get("guaranteed_low_count", 20),
         )
         if not selected:
             raise HTTPException(status_code=400, detail="题库题目不足，无法生成新题组")
