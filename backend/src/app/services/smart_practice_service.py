@@ -181,12 +181,13 @@ def _prioritize_lowest_count(questions: list[Question], target_count: int) -> li
     return questions[:target_count]
 
 
-def _compute_lowest_count_remaining(db: Session, bank_ids: list[int]) -> int | None:
+def _compute_lowest_count_remaining(db: Session, bank_ids: list[int], allowed_types: list[str] | None = None) -> int | None:
     if not bank_ids:
         return None
-    rows = db.exec(
-        select(Question.practice_count).where(Question.bank_id.in_(bank_ids), Question.practice_count >= 0)
-    ).all()
+    query = select(Question.practice_count).where(Question.bank_id.in_(bank_ids), Question.practice_count >= 0)
+    if allowed_types:
+        query = query.where(Question.type.in_(allowed_types))
+    rows = db.exec(query).all()
     counts = [row[0] if isinstance(row, tuple) else row for row in rows]
     if not counts:
         return None
@@ -264,7 +265,8 @@ def _serialize_group(
     # 动态根据当前抽题范围计算剩余 0 次计数的题目数量（优先使用用户选择的题库）
     selected_bank_ids = sp_session.settings_snapshot.get("bank_ids", [])
     resolved_banks = selected_bank_ids if selected_bank_ids else _resolve_bank_ids_for_draw(db, selected_bank_ids, current_user)
-    computed_lowest = _compute_lowest_count_remaining(db, resolved_banks) if resolved_banks else None
+    allowed_types = [t for t, v in (sp_session.settings_snapshot.get("type_ratio") or {}).items() if v]
+    computed_lowest = _compute_lowest_count_remaining(db, resolved_banks, allowed_types) if resolved_banks else None
     return schemas.SmartPracticeGroup(
         session_id=sp_session.id,
         group_id=group.id,
@@ -348,7 +350,8 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
 
     now = datetime.utcnow()
     snapshot = settings.model_dump(exclude={"created_at", "updated_at", "id"})
-    lowest_remaining = _compute_lowest_count_remaining(db, effective_bank_ids)
+    allowed_types = [t for t, v in (settings.type_ratio or {}).items() if v]
+    lowest_remaining = _compute_lowest_count_remaining(db, effective_bank_ids, allowed_types)
     sp_session = SmartPracticeSession(
         id=str(uuid4()),
         user_id=user.id,
@@ -406,6 +409,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
     practice_count_stats = None
     lowest_count_remaining = None
     per_bank_stats: list[schemas.SmartPracticeBankStats] | None = None
+    allowed_types = [t for t, v in (active.settings_snapshot.get("type_ratio") or {}).items() if v]
     if current_group:
         item_question_ids = {
             item.question_id
@@ -437,7 +441,11 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
         if selected_bank_ids:
             stats_rows = db.exec(
                 select(Question.practice_count)
-                .where(Question.bank_id.in_(selected_bank_ids))
+                .where(
+                    Question.bank_id.in_(selected_bank_ids),
+                    Question.practice_count >= 0,
+                    Question.type.in_(allowed_types) if allowed_types else True,
+                )
                 .order_by(Question.practice_count)
             ).all()
             buckets: dict[int, int] = {}
@@ -445,14 +453,20 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
                 cnt = row[0] if isinstance(row, tuple) else row
                 buckets[cnt] = buckets.get(cnt, 0) + 1
             practice_count_stats = buckets
-            lowest_count_remaining = _compute_lowest_count_remaining(db, selected_bank_ids)
+            lowest_count_remaining = _compute_lowest_count_remaining(db, selected_bank_ids, allowed_types)
             # 分题库统计（仅展示用户已选题库）
             banks = db.exec(select(Bank).where(Bank.id.in_(selected_bank_ids))).all()
             bank_title_map = {b.id: b.title for b in banks}
             per_bank_stats = []
             for bid in selected_bank_ids:
                 bank_rows = db.exec(
-                    select(Question.practice_count).where(Question.bank_id == bid).order_by(Question.practice_count)
+                    select(Question.practice_count)
+                    .where(
+                        Question.bank_id == bid,
+                        Question.practice_count >= 0,
+                        Question.type.in_(allowed_types) if allowed_types else True,
+                    )
+                    .order_by(Question.practice_count)
                 ).all()
                 bank_buckets: dict[int, int] = {}
                 for row in bank_rows:
@@ -778,8 +792,9 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
         if not selected:
             raise HTTPException(status_code=400, detail="题库题目不足，无法生成新题组")
         questions = selected
+        allowed_types = [t for t, v in (sp_session.settings_snapshot.get("type_ratio", {}) or {}).items() if v]
         sp_session.lowest_count_remaining = _compute_lowest_count_remaining(
-            db, effective_bank_ids
+            db, effective_bank_ids, allowed_types
         )
 
     group = _build_group(db, sp_session, questions, mode=mode, group_index=group_index)

@@ -19,19 +19,14 @@
         <input class="input" type="number" v-model.number="form.targetCount" placeholder="默认 50" />
       </view>
       <view class="form-row">
-        <text class="label">题型占比（总计 {{ ratioTotal }}%）</text>
-        <view class="ratio-grid">
-          <view v-for="opt in typeOptions" :key="opt.value" class="ratio-item">
-            <text class="ratio-label">{{ opt.label }}</text>
-            <input
-              class="input"
-              type="number"
-              :placeholder="opt.defaultRatio"
-              v-model.number="form.typeRatio[opt.value]"
-            />
-            <text class="ratio-unit">%</text>
-          </view>
+        <text class="label">题型选择（至少选一类）</text>
+        <view class="checkbox-row">
+          <label v-for="opt in typeOptions" :key="opt.value" class="checkbox">
+            <checkbox :value="opt.value" :checked="selectedTypes.includes(opt.value)" @change="onTypeSelect(opt.value, $event)" />
+            <text>{{ opt.label }}</text>
+          </label>
         </view>
+        <text class="hint">将仅从所选题型的题库题目中抽取、计数和展示统计。</text>
       </view>
       <view class="form-row switch-row">
         <text class="label">实时解析</text>
@@ -190,12 +185,6 @@ const status = reactive({
 const form = reactive({
   bankIds: [],
   targetCount: 50,
-  typeRatio: {
-    choice_single: 50,
-    choice_multi: 30,
-    choice_judgment: 20,
-    short_answer: 0,
-  },
   realtimeAnalysis: false,
 })
 const typeOptions = [
@@ -204,6 +193,7 @@ const typeOptions = [
   { value: 'choice_judgment', label: '判断', defaultRatio: 20 },
   { value: 'short_answer', label: '简答', defaultRatio: 0 },
 ]
+const selectedTypes = ref(typeOptions.map((t) => t.value))
 const sessionId = ref('')
 const group = ref(null)
 const answers = reactive({})
@@ -262,9 +252,7 @@ const isLastQuestion = computed(() => {
 })
 const nextLabel = computed(() => (isLastQuestion.value ? '完成本组' : '下一题'))
 const currentQuestion = computed(() => (group.value?.questions || [])[currentIndex.value])
-const ratioTotal = computed(() => {
-  return Object.values(form.typeRatio || {}).reduce((acc, val) => acc + Number(val || 0), 0)
-})
+const ratioTotal = computed(() => 0) // deprecated, kept to avoid template errors
 const shouldShowFeedback = computed(() => {
   if (!group.value?.realtime_analysis) return false
   const q = currentQuestion.value
@@ -293,6 +281,15 @@ const onBankSelect = (e) => {
   form.bankIds = vals
 }
 
+const onTypeSelect = (type, e) => {
+  const checked = !!e?.detail?.value?.length || e?.detail?.value === type
+  if (checked && !selectedTypes.value.includes(type)) {
+    selectedTypes.value.push(type)
+  } else if (!checked) {
+    selectedTypes.value = selectedTypes.value.filter((t) => t !== type)
+  }
+}
+
 const loadBanks = async () => {
   try {
     const res = await fetchBanks()
@@ -308,7 +305,9 @@ const loadSettings = async () => {
     if (!res) return
     form.bankIds = res.bank_ids || []
     form.targetCount = res.target_count || 50
-    form.typeRatio = res.type_ratio || form.typeRatio
+    const ratio = res.type_ratio || {}
+    const keys = Object.keys(ratio).filter((k) => ratio[k])
+    selectedTypes.value = keys.length ? keys : typeOptions.map((t) => t.value)
     form.realtimeAnalysis = true
     realtimeSwitch.value = true
   } catch (err) {
@@ -337,15 +336,18 @@ const saveSettings = async () => {
   if (!form.bankIds.length) {
     return uni.showToast({ title: '请至少选择一个题库', icon: 'none' })
   }
-  if (ratioTotal.value !== 100 && ratioTotal.value !== 0) {
-    return uni.showToast({ title: '题型占比需合计 100%（或留空）', icon: 'none' })
+  if (!selectedTypes.value.length) {
+    return uni.showToast({ title: '请至少选择一个题型', icon: 'none' })
   }
   saving.value = true
   try {
     await saveSmartPracticeSettings({
       bank_ids: form.bankIds,
       target_count: form.targetCount || 50,
-      type_ratio: form.typeRatio,
+      type_ratio: selectedTypes.value.reduce((acc, cur) => {
+        acc[cur] = 1
+        return acc
+      }, {}),
       realtime_analysis: form.realtimeAnalysis,
     })
     uni.showToast({ title: '已保存', icon: 'none' })
@@ -399,15 +401,18 @@ const startSmart = async () => {
   if (!form.bankIds.length) {
     return uni.showToast({ title: '请至少选择一个题库', icon: 'none' })
   }
-  if (ratioTotal.value !== 100 && ratioTotal.value !== 0) {
-    return uni.showToast({ title: '题型占比需合计 100%（或留空）', icon: 'none' })
+  if (!selectedTypes.value.length) {
+    return uni.showToast({ title: '请至少选择一个题型', icon: 'none' })
   }
   starting.value = true
   try {
     await saveSmartPracticeSettings({
       bank_ids: form.bankIds,
       target_count: form.targetCount || 50,
-      type_ratio: form.typeRatio,
+      type_ratio: selectedTypes.value.reduce((acc, cur) => {
+        acc[cur] = 1
+        return acc
+      }, {}),
       realtime_analysis: form.realtimeAnalysis,
     })
     const res = await startSmartPracticeSession()
@@ -897,25 +902,10 @@ onUnload(async () => {
   background: #f8fafc;
 }
 
-.ratio-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10rpx;
-}
-
-.ratio-item {
+.checkbox-row {
   display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.ratio-label {
-  width: 120rpx;
-  color: #334155;
-}
-
-.ratio-unit {
-  color: #94a3b8;
+  flex-wrap: wrap;
+  gap: 10rpx;
 }
 
 .switch-row {
