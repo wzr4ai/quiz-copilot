@@ -199,7 +199,8 @@ const typeOptions = [
   { value: 'choice_judgment', label: '判断', defaultRatio: 20 },
   { value: 'short_answer', label: '简答', defaultRatio: 0 },
 ]
-const selectedTypes = ref(typeOptions.map((t) => t.value))
+const defaultSelectedTypes = typeOptions.filter((t) => t.defaultRatio > 0).map((t) => t.value)
+const selectedTypes = ref(defaultSelectedTypes)
 const sessionId = ref('')
 const group = ref(null)
 const answers = reactive({})
@@ -314,7 +315,7 @@ const loadSettings = async () => {
     form.guaranteedLowCount = res.guaranteed_low_count ?? 20
     const ratio = res.type_ratio || {}
     const keys = Object.keys(ratio).filter((k) => ratio[k])
-    selectedTypes.value = keys.length ? keys : typeOptions.map((t) => t.value)
+    selectedTypes.value = keys.length ? keys : defaultSelectedTypes
     form.realtimeAnalysis = true
     realtimeSwitch.value = true
   } catch (err) {

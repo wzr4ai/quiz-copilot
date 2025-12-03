@@ -26,6 +26,30 @@ from app.models.db_models import (
 # 开关：是否尊重用户所选题库，仅从中抽题 若为 False，则从所有可访问题库中抽题
 USE_SELECTED_BANKS_FOR_SMART_PRACTICE = True # Temporary: False means draw from all accessible banks
 
+ALLOWED_PRACTICE_TYPES = {"choice_single", "choice_multi", "choice_judgment", "short_answer"}
+
+
+def _derive_selected_types(type_ratio: dict | None) -> list[str]:
+    """Return normalized allowed types based on ratio config.
+
+    - Only keep known types.
+    - Treat numeric ratios <= 0 (or invalid) as unselected.
+    - Fallback to默认题型（单选/多选/判断）。
+    """
+    if not type_ratio:
+        return ["choice_single", "choice_multi", "choice_judgment"]
+    selected: list[str] = []
+    for t, v in type_ratio.items():
+        if t not in ALLOWED_PRACTICE_TYPES:
+            continue
+        try:
+            numeric = float(v)
+        except (TypeError, ValueError):
+            continue
+        if numeric > 0:
+            selected.append(t)
+    return selected or ["choice_single", "choice_multi", "choice_judgment"]
+
 
 def _normalize_answer(val: str, qtype: str) -> str:
     if qtype == "choice_multi":
@@ -120,7 +144,7 @@ def _select_questions_by_ratio(
         return [], []
 
     # 允许的题型：type_ratio 仅作为过滤器；默认限单选/多选/判断
-    selected_types = [t for t, v in type_ratio.items() if v] if type_ratio else ["choice_single", "choice_multi", "choice_judgment"]
+    selected_types = _derive_selected_types(type_ratio)
     valid_questions = [q for q in questions if q.type in selected_types and q.practice_count >= 0]
     if not valid_questions:
         return [], []
@@ -266,7 +290,7 @@ def _serialize_group(
     # 动态根据当前抽题范围计算剩余 0 次计数的题目数量（优先使用用户选择的题库）
     selected_bank_ids = sp_session.settings_snapshot.get("bank_ids", [])
     resolved_banks = selected_bank_ids if selected_bank_ids else _resolve_bank_ids_for_draw(db, selected_bank_ids, current_user)
-    allowed_types = [t for t, v in (sp_session.settings_snapshot.get("type_ratio") or {}).items() if v]
+    allowed_types = _derive_selected_types(sp_session.settings_snapshot.get("type_ratio") or {})
     computed_lowest = _compute_lowest_count_remaining(db, resolved_banks, allowed_types) if resolved_banks else None
     return schemas.SmartPracticeGroup(
         session_id=sp_session.id,
@@ -354,7 +378,7 @@ def start_session(db: Session, user: User) -> schemas.SmartPracticeGroup:
 
     now = datetime.utcnow()
     snapshot = settings.model_dump(exclude={"created_at", "updated_at", "id"})
-    allowed_types = [t for t, v in (settings.type_ratio or {}).items() if v]
+    allowed_types = _derive_selected_types(settings.type_ratio)
     lowest_remaining = _compute_lowest_count_remaining(db, effective_bank_ids, allowed_types)
     sp_session = SmartPracticeSession(
         id=str(uuid4()),
@@ -413,7 +437,7 @@ def get_status(db: Session, user: User) -> schemas.SmartPracticeStatus:
     practice_count_stats = None
     lowest_count_remaining = None
     per_bank_stats: list[schemas.SmartPracticeBankStats] | None = None
-    allowed_types = [t for t, v in (active.settings_snapshot.get("type_ratio") or {}).items() if v]
+    allowed_types = _derive_selected_types(active.settings_snapshot.get("type_ratio") or {})
     if current_group:
         item_question_ids = {
             item.question_id
@@ -797,10 +821,8 @@ def next_group(db: Session, session_id: str, user: User) -> schemas.SmartPractic
         if not selected:
             raise HTTPException(status_code=400, detail="题库题目不足，无法生成新题组")
         questions = selected
-        allowed_types = [t for t, v in (sp_session.settings_snapshot.get("type_ratio", {}) or {}).items() if v]
-        sp_session.lowest_count_remaining = _compute_lowest_count_remaining(
-            db, effective_bank_ids, allowed_types
-        )
+        allowed_types = _derive_selected_types(sp_session.settings_snapshot.get("type_ratio") or {})
+        sp_session.lowest_count_remaining = _compute_lowest_count_remaining(db, effective_bank_ids, allowed_types)
 
     group = _build_group(db, sp_session, questions, mode=mode, group_index=group_index)
     sp_session.current_group_index = group_index
