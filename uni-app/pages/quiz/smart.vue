@@ -66,6 +66,7 @@
           </button>
         </view>
         <text class="question-content">{{ currentQuestion.content }}</text>
+        <text v-if="questionBankLabel" class="question-bank">题库：{{ questionBankLabel }}</text>
 
         <view v-if="['choice_single', 'choice_judgment'].includes(currentQuestion.type)" class="options">
           <view
@@ -274,6 +275,31 @@ const remainingLabel = computed(() => {
   return '未知'
 })
 const perBankStats = computed(() => status.per_bank_stats || [])
+const bankMap = computed(() => {
+  const map = {}
+  banks.value.forEach((b) => {
+    map[b.id] = b.title
+  })
+  perBankStats.value.forEach((b) => {
+    if (b.bank_id) {
+      map[b.bank_id] = b.title || b.name || map[b.bank_id]
+    }
+  })
+  return map
+})
+const questionBankLabel = computed(() => {
+  const q = currentQuestion.value
+  if (!q) return ''
+  const fromQuestion =
+    q.bank_title ||
+    q.bankTitle ||
+    (q.bank && (q.bank.title || q.bank.name)) ||
+    bankMap.value[q.bank_id] ||
+    bankMap.value[q.bankId]
+  const fallback = bankMap.value[(form.bankIds || [])[0]]
+  const title = fromQuestion || fallback
+  return title ? String(title) : ''
+})
 
 const typeLabel = (type) => {
   if (type === 'choice_single') return '单选'
@@ -1024,6 +1050,13 @@ onUnload(async () => {
   font-size: 30rpx;
   color: #0f172a;
   line-height: 1.6;
+}
+
+.question-bank {
+  display: block;
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: #94a3b8;
 }
 
 .options {

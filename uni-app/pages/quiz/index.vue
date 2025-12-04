@@ -177,7 +177,7 @@ const questionBankLabel = computed(() => {
     bankMap.value[q.bankId]
   const fallback = bankMap.value[bankId.value] || ''
   const title = fromQuestion || fallback
-  return title ? String(title).slice(0, 10) : ''
+  return title ? String(title) : ''
 })
 
 const modeLabel = computed(() => {
