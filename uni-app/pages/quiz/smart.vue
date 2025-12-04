@@ -160,7 +160,6 @@ import { computed, reactive, ref, watch } from 'vue'
 import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import {
   answerSmartPracticeQuestion,
-  adminGetQuestionById,
   fetchBanks,
   fetchCurrentSmartPracticeGroup,
   fetchSmartPracticeSettings,
