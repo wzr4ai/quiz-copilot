@@ -278,7 +278,7 @@ const remainingLabel = computed(() => {
 })
 const perBankStats = computed(() => status.per_bank_stats || [])
 const bankExtras = reactive({})
-const questionBankCache = reactive({})
+const questionBankCache = reactive({}) // { [questionId]: { title, reliable } }
 const bankMap = computed(() => {
   const map = {}
   const save = (id, title) => {
@@ -302,8 +302,10 @@ const bankMap = computed(() => {
 const questionBankLabel = computed(() => {
   const q = currentQuestion.value
   if (!q) return ''
+  const cached = questionBankCache[q.id]
+  const cachedTitle = typeof cached === 'string' ? cached : cached?.title
   const fromQuestion =
-    questionBankCache[q.id] ||
+    cachedTitle ||
     q._bankTitle ||
     q.bank_title ||
     q.bankTitle ||
@@ -428,7 +430,7 @@ watch(
       const local = resolveLocalBankTitle(q)
       if (local.title) {
         q._bankTitle = local.title
-        questionBankCache[q.id] = local.title
+        questionBankCache[q.id] = { title: local.title, reliable: local.reliable }
         if (!local.reliable) {
           ensureQuestionBank(q)
         }
@@ -458,11 +460,13 @@ const resolveLocalBankTitle = (q) => {
 
 const ensureQuestionBank = async (question) => {
   if (!question) return
-  if (questionBankCache[question.id]) return
+  const cached = questionBankCache[question.id]
+  const cachedReliable = typeof cached === 'string' ? true : !!cached?.reliable
+  if (cachedReliable) return
   const local = resolveLocalBankTitle(question)
   if (local.title) {
     question._bankTitle = local.title
-    questionBankCache[question.id] = local.title
+    questionBankCache[question.id] = { title: local.title, reliable: local.reliable }
     // 如果只是 fallback（非可靠来源），继续尝试后台查询校正
     if (local.reliable) return
   }
@@ -475,7 +479,7 @@ const ensureQuestionBank = async (question) => {
       bankMap.value[String(bankId)] ||
       resolveLocalBankTitle({ ...question, bank_id: bankId }).title
     if (title) {
-      questionBankCache[question.id] = title
+      questionBankCache[question.id] = { title, reliable: true }
       question._bankTitle = title
       if (bankId) {
         bankExtras[String(bankId)] = title
@@ -484,7 +488,7 @@ const ensureQuestionBank = async (question) => {
   } catch (err) {
     // ignore lookup failures to avoid打扰答题体验
     if (!questionBankCache[question.id]) {
-      questionBankCache[question.id] = question._bankTitle || ''
+      questionBankCache[question.id] = { title: question._bankTitle || '', reliable: false }
     }
   }
 }
@@ -506,7 +510,7 @@ const resetAnswers = (questions, currentIndex = 0) => {
     const local = resolveLocalBankTitle(q)
     q._bankTitle = local.title
     if (local.title) {
-      questionBankCache[q.id] = local.title
+      questionBankCache[q.id] = { title: local.title, reliable: local.reliable }
       if (!local.reliable) {
         ensureQuestionBank(q)
       }
