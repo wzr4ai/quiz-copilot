@@ -279,6 +279,10 @@ const remainingLabel = computed(() => {
 const perBankStats = computed(() => status.per_bank_stats || [])
 const bankExtras = reactive({})
 const questionBankCache = reactive({}) // { [questionId]: { title, reliable } }
+const bankName = (id) => {
+  if (id === null || id === undefined) return ''
+  return bankMap.value[String(id)] || ''
+}
 const bankMap = computed(() => {
   const map = {}
   const save = (id, title) => {
@@ -310,10 +314,9 @@ const questionBankLabel = computed(() => {
     q.bank_title ||
     q.bankTitle ||
     (q.bank && (q.bank.title || q.bank.name)) ||
-    bankMap.value[q.bank_id] ||
-    bankMap.value[q.bankId]
+    bankName(q.bank_id ?? q.bankId)
   const fallback =
-    bankMap.value[(form.bankIds || [])[0]] ||
+    bankName((form.bankIds || [])[0]) ||
     (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
   const title = fromQuestion || fallback
   return title ? String(title) : ''
@@ -448,12 +451,12 @@ const resolveLocalBankTitle = (q) => {
     q.bank_title ||
     q.bankTitle ||
     (q.bank && (q.bank.title || q.bank.name)) ||
-    bankMap.value[bankId]
+    bankName(bankId)
   if (fromQuestion) {
     return { title: fromQuestion, reliable: true }
   }
   const fallback =
-    bankMap.value[normalize((form.bankIds || [])[0])] ||
+    bankName(normalize((form.bankIds || [])[0])) ||
     (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
   return { title: fallback || '', reliable: false }
 }
@@ -476,7 +479,7 @@ const ensureQuestionBank = async (question) => {
     const title =
       detail?.bank?.title ||
       detail?.bank?.name ||
-      bankMap.value[String(bankId)] ||
+      bankName(bankId) ||
       resolveLocalBankTitle({ ...question, bank_id: bankId }).title
     if (title) {
       questionBankCache[question.id] = { title, reliable: true }
