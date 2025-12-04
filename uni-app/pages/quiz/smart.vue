@@ -160,6 +160,7 @@ import { computed, reactive, ref, watch } from 'vue'
 import { onHide, onShow, onUnload } from '@dcloudio/uni-app'
 import {
   answerSmartPracticeQuestion,
+  adminGetQuestionById,
   fetchBanks,
   fetchCurrentSmartPracticeGroup,
   fetchSmartPracticeSettings,
@@ -275,6 +276,7 @@ const remainingLabel = computed(() => {
   return '未知'
 })
 const perBankStats = computed(() => status.per_bank_stats || [])
+const questionBankCache = reactive({})
 const bankMap = computed(() => {
   const map = {}
   banks.value.forEach((b) => {
@@ -291,6 +293,7 @@ const questionBankLabel = computed(() => {
   const q = currentQuestion.value
   if (!q) return ''
   const fromQuestion =
+    questionBankCache[q.id] ||
     q._bankTitle ||
     q.bank_title ||
     q.bankTitle ||
@@ -399,13 +402,73 @@ const saveSettings = async () => {
   }
 }
 
-const resetAnswers = (questions, currentIndex = 0) => {
-  const resolveBankTitle = (q) => {
-    const titleFromQuestion =
-      q.bank_title || q.bankTitle || (q.bank && (q.bank.title || q.bank.name)) || bankMap.value[q.bank_id] || bankMap.value[q.bankId]
-    const fallback = bankMap.value[(form.bankIds || [])[0]]
-    return titleFromQuestion || fallback || ''
+watch(
+  () => currentQuestion.value && currentQuestion.value.id,
+  () => {
+    if (currentQuestion.value) ensureQuestionBank(currentQuestion.value)
+  },
+  { immediate: true },
+)
+
+watch(
+  () => [banks.value.length, perBankStats.value.length],
+  () => {
+    const q = currentQuestion.value
+    if (q && !questionBankCache[q.id]) {
+      const local = resolveLocalBankTitle(q)
+      if (local) {
+        q._bankTitle = local
+        questionBankCache[q.id] = local
+      }
+    }
+  },
+)
+
+const resolveLocalBankTitle = (q) => {
+  if (!q) return ''
+  const fromQuestion =
+    q._bankTitle ||
+    q.bank_title ||
+    q.bankTitle ||
+    (q.bank && (q.bank.title || q.bank.name)) ||
+    bankMap.value[q.bank_id] ||
+    bankMap.value[q.bankId]
+  const fallback =
+    bankMap.value[(form.bankIds || [])[0]] ||
+    (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
+  return fromQuestion || fallback || ''
+}
+
+const ensureQuestionBank = async (question) => {
+  if (!question) return
+  if (questionBankCache[question.id]) return
+  const local = resolveLocalBankTitle(question)
+  if (local) {
+    question._bankTitle = local
+    questionBankCache[question.id] = local
+    return
   }
+  try {
+    const detail = await adminGetQuestionById(question.id)
+    const bankId = detail?.bank_id || detail?.bankId || detail?.bank?.id
+    const title =
+      detail?.bank?.title ||
+      detail?.bank?.name ||
+      bankMap.value[bankId] ||
+      resolveLocalBankTitle({ ...question, bank_id: bankId })
+    if (title) {
+      questionBankCache[question.id] = title
+      question._bankTitle = title
+    }
+  } catch (err) {
+    // ignore lookup failures to avoid打扰答题体验
+    if (!questionBankCache[question.id]) {
+      questionBankCache[question.id] = question._bankTitle || ''
+    }
+  }
+}
+
+const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(answers).forEach((k) => delete answers[k])
   Object.keys(multiSelections).forEach((k) => delete multiSelections[k])
   Object.keys(feedback).forEach((k) => delete feedback[k])
@@ -414,7 +477,10 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(everWrong).forEach((k) => delete everWrong[k])
   const cached = loadGroupState()
   questions.forEach((q) => {
-    q._bankTitle = resolveBankTitle(q)
+    q._bankTitle = resolveLocalBankTitle(q)
+    if (q._bankTitle) {
+      questionBankCache[q.id] = q._bankTitle
+    }
     const cachedInitial = cached?.initialCounts?.[q.id]
     initialCounts[q.id] =
       typeof cachedInitial === 'number' ? cachedInitial : typeof q.practice_count === 'number' ? q.practice_count : 0
