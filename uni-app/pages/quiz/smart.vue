@@ -281,16 +281,21 @@ const bankExtras = reactive({})
 const questionBankCache = reactive({})
 const bankMap = computed(() => {
   const map = {}
+  const save = (id, title) => {
+    if (id === null || id === undefined || title === undefined) return
+    const key = String(id)
+    map[key] = title
+  }
   banks.value.forEach((b) => {
-    map[b.id] = b.title
+    save(b.id, b.title)
   })
   perBankStats.value.forEach((b) => {
     if (b.bank_id) {
-      map[b.bank_id] = b.title || b.name || map[b.bank_id]
+      save(b.bank_id, b.title || b.name || map[b.bank_id])
     }
   })
   Object.keys(bankExtras).forEach((id) => {
-    map[id] = bankExtras[id]
+    save(id, bankExtras[id])
   })
   return map
 })
@@ -434,18 +439,19 @@ watch(
 
 const resolveLocalBankTitle = (q) => {
   if (!q) return { title: '', reliable: false }
+  const normalize = (val) => (val === null || val === undefined ? '' : String(val))
+  const bankId = normalize(q.bank_id ?? q.bankId ?? q.bank_id)
   const fromQuestion =
     q._bankTitle ||
     q.bank_title ||
     q.bankTitle ||
     (q.bank && (q.bank.title || q.bank.name)) ||
-    bankMap.value[q.bank_id] ||
-    bankMap.value[q.bankId]
+    bankMap.value[bankId]
   if (fromQuestion) {
     return { title: fromQuestion, reliable: true }
   }
   const fallback =
-    bankMap.value[(form.bankIds || [])[0]] ||
+    bankMap.value[normalize((form.bankIds || [])[0])] ||
     (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
   return { title: fallback || '', reliable: false }
 }
@@ -466,13 +472,13 @@ const ensureQuestionBank = async (question) => {
     const title =
       detail?.bank?.title ||
       detail?.bank?.name ||
-      bankMap.value[bankId] ||
+      bankMap.value[String(bankId)] ||
       resolveLocalBankTitle({ ...question, bank_id: bankId }).title
     if (title) {
       questionBankCache[question.id] = title
       question._bankTitle = title
       if (bankId) {
-        bankExtras[bankId] = title
+        bankExtras[String(bankId)] = title
       }
     }
   } catch (err) {
