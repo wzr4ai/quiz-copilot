@@ -216,6 +216,8 @@ class SmartPracticeBankStats(BaseModel):
 
 class SmartPracticeQuestion(BaseModel):
     id: int
+    bank_id: int
+    bank_title: str | None = None
     content: str
     type: str
     options: List[Option] = Field(default_factory=list)

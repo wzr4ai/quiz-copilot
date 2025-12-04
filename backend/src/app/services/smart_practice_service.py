@@ -270,12 +270,18 @@ def _serialize_group(
             )
         ).all()
     }
+    bank_ids = {q.bank_id for q in questions}
+    bank_rows = db.exec(select(Bank).where(Bank.id.in_(bank_ids))).all() if bank_ids else []
+    bank_title_map = {b.id: b.title for b in bank_rows}
+
     question_map: list[schemas.SmartPracticeQuestion] = []
     for q in questions:
         answer = answers.get(q.id)
         question_map.append(
             schemas.SmartPracticeQuestion(
                 id=q.id,
+                bank_id=q.bank_id,
+                bank_title=bank_title_map.get(q.bank_id),
                 content=q.content,
                 type=q.type,
                 options=[schemas.Option(**opt) for opt in q.options or []],
