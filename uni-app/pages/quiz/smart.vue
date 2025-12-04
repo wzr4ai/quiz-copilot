@@ -172,6 +172,8 @@ import {
   nextSmartPracticeGroup,
   getRole,
   updateQuestionApi,
+  // 用于根据 QID 回查题库
+  adminGetQuestionById,
 } from '../../services/api'
 
 const banks = ref([])
@@ -276,6 +278,7 @@ const remainingLabel = computed(() => {
   return '未知'
 })
 const perBankStats = computed(() => status.per_bank_stats || [])
+const bankExtras = reactive({})
 const questionBankCache = reactive({})
 const bankMap = computed(() => {
   const map = {}
@@ -286,6 +289,9 @@ const bankMap = computed(() => {
     if (b.bank_id) {
       map[b.bank_id] = b.title || b.name || map[b.bank_id]
     }
+  })
+  Object.keys(bankExtras).forEach((id) => {
+    map[id] = bankExtras[id]
   })
   return map
 })
@@ -459,6 +465,9 @@ const ensureQuestionBank = async (question) => {
     if (title) {
       questionBankCache[question.id] = title
       question._bankTitle = title
+      if (bankId) {
+        bankExtras[bankId] = title
+      }
     }
   } catch (err) {
     // ignore lookup failures to avoid打扰答题体验
@@ -466,6 +475,11 @@ const ensureQuestionBank = async (question) => {
       questionBankCache[question.id] = question._bankTitle || ''
     }
   }
+}
+
+const warmupQuestionBanks = async (questions = []) => {
+  const tasks = questions.map((q) => ensureQuestionBank(q))
+  await Promise.all(tasks)
 }
 
 const resetAnswers = (questions, currentIndex = 0) => {
@@ -509,6 +523,7 @@ const resetAnswers = (questions, currentIndex = 0) => {
     editMode.value = false
     loadEditForm(questions[currentIndex])
   }
+  warmupQuestionBanks(questions)
 }
 
 const startSmart = async () => {
