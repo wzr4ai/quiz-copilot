@@ -291,12 +291,15 @@ const questionBankLabel = computed(() => {
   const q = currentQuestion.value
   if (!q) return ''
   const fromQuestion =
+    q._bankTitle ||
     q.bank_title ||
     q.bankTitle ||
     (q.bank && (q.bank.title || q.bank.name)) ||
     bankMap.value[q.bank_id] ||
     bankMap.value[q.bankId]
-  const fallback = bankMap.value[(form.bankIds || [])[0]]
+  const fallback =
+    bankMap.value[(form.bankIds || [])[0]] ||
+    (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
   const title = fromQuestion || fallback
   return title ? String(title) : ''
 })
@@ -397,6 +400,12 @@ const saveSettings = async () => {
 }
 
 const resetAnswers = (questions, currentIndex = 0) => {
+  const resolveBankTitle = (q) => {
+    const titleFromQuestion =
+      q.bank_title || q.bankTitle || (q.bank && (q.bank.title || q.bank.name)) || bankMap.value[q.bank_id] || bankMap.value[q.bankId]
+    const fallback = bankMap.value[(form.bankIds || [])[0]]
+    return titleFromQuestion || fallback || ''
+  }
   Object.keys(answers).forEach((k) => delete answers[k])
   Object.keys(multiSelections).forEach((k) => delete multiSelections[k])
   Object.keys(feedback).forEach((k) => delete feedback[k])
@@ -405,6 +414,7 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(everWrong).forEach((k) => delete everWrong[k])
   const cached = loadGroupState()
   questions.forEach((q) => {
+    q._bankTitle = resolveBankTitle(q)
     const cachedInitial = cached?.initialCounts?.[q.id]
     initialCounts[q.id] =
       typeof cachedInitial === 'number' ? cachedInitial : typeof q.practice_count === 'number' ? q.practice_count : 0
