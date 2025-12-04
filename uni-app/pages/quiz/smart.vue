@@ -421,16 +421,19 @@ watch(
     const q = currentQuestion.value
     if (q && !questionBankCache[q.id]) {
       const local = resolveLocalBankTitle(q)
-      if (local) {
-        q._bankTitle = local
-        questionBankCache[q.id] = local
+      if (local.title) {
+        q._bankTitle = local.title
+        questionBankCache[q.id] = local.title
+        if (!local.reliable) {
+          ensureQuestionBank(q)
+        }
       }
     }
   },
 )
 
 const resolveLocalBankTitle = (q) => {
-  if (!q) return ''
+  if (!q) return { title: '', reliable: false }
   const fromQuestion =
     q._bankTitle ||
     q.bank_title ||
@@ -438,20 +441,24 @@ const resolveLocalBankTitle = (q) => {
     (q.bank && (q.bank.title || q.bank.name)) ||
     bankMap.value[q.bank_id] ||
     bankMap.value[q.bankId]
+  if (fromQuestion) {
+    return { title: fromQuestion, reliable: true }
+  }
   const fallback =
     bankMap.value[(form.bankIds || [])[0]] ||
     (perBankStats.value.length ? perBankStats.value[0].title || perBankStats.value[0].name : '')
-  return fromQuestion || fallback || ''
+  return { title: fallback || '', reliable: false }
 }
 
 const ensureQuestionBank = async (question) => {
   if (!question) return
   if (questionBankCache[question.id]) return
   const local = resolveLocalBankTitle(question)
-  if (local) {
-    question._bankTitle = local
-    questionBankCache[question.id] = local
-    return
+  if (local.title) {
+    question._bankTitle = local.title
+    questionBankCache[question.id] = local.title
+    // 如果只是 fallback（非可靠来源），继续尝试后台查询校正
+    if (local.reliable) return
   }
   try {
     const detail = await adminGetQuestionById(question.id)
@@ -460,7 +467,7 @@ const ensureQuestionBank = async (question) => {
       detail?.bank?.title ||
       detail?.bank?.name ||
       bankMap.value[bankId] ||
-      resolveLocalBankTitle({ ...question, bank_id: bankId })
+      resolveLocalBankTitle({ ...question, bank_id: bankId }).title
     if (title) {
       questionBankCache[question.id] = title
       question._bankTitle = title
@@ -490,9 +497,13 @@ const resetAnswers = (questions, currentIndex = 0) => {
   Object.keys(everWrong).forEach((k) => delete everWrong[k])
   const cached = loadGroupState()
   questions.forEach((q) => {
-    q._bankTitle = resolveLocalBankTitle(q)
-    if (q._bankTitle) {
-      questionBankCache[q.id] = q._bankTitle
+    const local = resolveLocalBankTitle(q)
+    q._bankTitle = local.title
+    if (local.title) {
+      questionBankCache[q.id] = local.title
+      if (!local.reliable) {
+        ensureQuestionBank(q)
+      }
     }
     const cachedInitial = cached?.initialCounts?.[q.id]
     initialCounts[q.id] =
