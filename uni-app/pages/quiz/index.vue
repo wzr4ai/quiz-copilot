@@ -38,6 +38,7 @@
 				</view>
 			</view>
 			<text class="question-content">{{ currentQuestion.content }}</text>
+			<text v-if="questionBankLabel" class="question-bank">题库：{{ questionBankLabel }}</text>
 
 			<view v-if="['choice_single', 'choice_judgment'].includes(currentQuestion.type)" class="options">
 				<view
@@ -158,6 +159,26 @@ const isAdmin = computed(() => role.value === 'admin')
 const isMemorize = computed(() => mode.value.startsWith('memorize'))
 
 const currentQuestion = computed(() => questions.value[currentIndex.value])
+const bankMap = computed(() => {
+  const map = {}
+  banks.value.forEach((b) => {
+    map[b.id] = b.title
+  })
+  return map
+})
+const questionBankLabel = computed(() => {
+  const q = currentQuestion.value
+  if (!q) return ''
+  const fromQuestion =
+    q.bank_title ||
+    q.bankTitle ||
+    (q.bank && (q.bank.title || q.bank.name)) ||
+    bankMap.value[q.bank_id] ||
+    bankMap.value[q.bankId]
+  const fallback = bankMap.value[bankId.value] || ''
+  const title = fromQuestion || fallback
+  return title ? String(title).slice(0, 10) : ''
+})
 
 const modeLabel = computed(() => {
   if (mode.value === 'wrong') return '错题重练'
@@ -623,6 +644,13 @@ const syncFavoriteStatus = () => {
 	font-size: 32rpx;
 	color: #0f172a;
 	line-height: 1.6;
+}
+
+.question-bank {
+	font-size: 22rpx;
+	color: #94a3b8;
+	margin-top: 4rpx;
+	display: block;
 }
 
 .card-actions {
