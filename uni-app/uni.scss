@@ -74,3 +74,126 @@ $uni-color-subtitle: #555555; // 二级标题颜色
 $uni-font-size-subtitle:26px;
 $uni-color-paragraph: #3F536E; // 文章段落颜色
 $uni-font-size-paragraph:15px;
+
+:root {
+  color-scheme: light;
+  --page-bg: linear-gradient(180deg, #f7faff 0%, #ffffff 80%);
+  --page-bg-flat: #f8fafc;
+  --card-bg: #ffffff;
+  --surface-weak: #f8fafc;
+  --border-color: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #64748b;
+  --text-tertiary: #94a3b8;
+  --muted-contrast: #cbd5e1;
+  --shadow-soft: 0 6rpx 24rpx rgba(15, 23, 42, 0.06);
+  --accent: #0ea5e9;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+  --page-bg: linear-gradient(180deg, #0c1626 0%, #0b1220 80%);
+  --page-bg-flat: #0b1220;
+  --card-bg: #0f172a;
+  --surface-weak: #111827;
+  --border-color: #1f2937;
+  --text-primary: #e2e8f0;
+  --text-secondary: #cbd5e1;
+  --text-tertiary: #94a3b8;
+  --muted-contrast: #334155;
+  --shadow-soft: 0 10rpx 30rpx rgba(0, 0, 0, 0.35);
+  --accent: #38bdf8;
+}
+
+[data-theme='dark'] .page,
+[data-theme='dark'] page {
+  background: var(--page-bg);
+  color: var(--text-primary);
+}
+
+[data-theme='dark'] .card {
+  background: var(--card-bg);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-soft);
+  border: 1rpx solid var(--border-color);
+}
+
+[data-theme='dark'] .hero {
+  background: #0b1220;
+  color: var(--text-primary);
+}
+
+[data-theme='dark'] .card-title,
+[data-theme='dark'] .title,
+[data-theme='dark'] .name,
+[data-theme='dark'] .bank-title,
+[data-theme='dark'] .question-content,
+[data-theme='dark'] .stat-value,
+[data-theme='dark'] .q {
+  color: var(--text-primary);
+}
+
+[data-theme='dark'] .subtitle,
+[data-theme='dark'] .meta,
+[data-theme='dark'] .hint,
+[data-theme='dark'] .bank-desc,
+[data-theme='dark'] .empty,
+[data-theme='dark'] .analysis,
+[data-theme='dark'] .label,
+[data-theme='dark'] .eyebrow,
+[data-theme='dark'] .arrow,
+[data-theme='dark'] .stat-label,
+[data-theme='dark'] .theme-desc,
+[data-theme='dark'] .desc {
+  color: var(--text-secondary);
+}
+
+[data-theme='dark'] .picker,
+[data-theme='dark'] .input,
+[data-theme='dark'] .textarea,
+[data-theme='dark'] .option,
+[data-theme='dark'] .stat,
+[data-theme='dark'] .bank-card,
+[data-theme='dark'] .bucket-chip,
+[data-theme='dark'] .edit-panel,
+[data-theme='dark'] .bank-item,
+[data-theme='dark'] .theme-tile,
+[data-theme='dark'] .section,
+[data-theme='dark'] .form-card,
+[data-theme='dark'] .quick-result,
+[data-theme='dark'] .chip,
+[data-theme='dark'] .import-file,
+[data-theme='dark'] .item {
+  background: var(--surface-weak);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+[data-theme='dark'] .feedback,
+[data-theme='dark'] .edit-panel,
+[data-theme='dark'] .wrong {
+  border-color: var(--muted-contrast);
+}
+
+[data-theme='dark'] .option.active {
+  background: rgba(56, 189, 248, 0.18);
+  border-color: var(--accent);
+}
+
+[data-theme='dark'] .ghost {
+  background: var(--surface-weak);
+  color: var(--text-primary);
+  border: 1rpx solid var(--border-color);
+}
+
+[data-theme='dark'] .bucket-chip {
+  color: var(--text-primary);
+}
+
+[data-theme='dark'] .theme-pill {
+  background: var(--accent);
+}
+
+[data-theme='dark'] .switch-row {
+  color: var(--text-secondary);
+}

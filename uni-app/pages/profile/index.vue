@@ -29,6 +29,28 @@
 		</view>
 
 		<view class="card">
+			<text class="card-title">外观</text>
+			<view class="theme-grid">
+				<view
+					v-for="option in themeOptions"
+					:key="option.value"
+					class="theme-tile"
+					:class="{ active: themePreference === option.value }"
+					@click="changeTheme(option.value)"
+				>
+					<view>
+						<text class="theme-name">{{ option.label }}</text>
+						<text class="theme-desc">{{ option.desc }}</text>
+					</view>
+					<text class="theme-pill">
+						{{ option.value === 'system' ? `系统${activeTheme === 'dark' ? '深色' : '浅色'}` : '已选' }}
+					</text>
+				</view>
+			</view>
+			<text class="hint">当前外观：{{ activeThemeLabel }}</text>
+		</view>
+
+		<view class="card">
 			<text class="card-title">学习数据</text>
 			<view class="stats">
 				<view class="stat">
@@ -101,7 +123,7 @@
 
 <script setup>
 import { onShow } from '@dcloudio/uni-app'
-import { computed, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   clearToken,
   fetchSmartPracticeStatus,
@@ -113,6 +135,7 @@ import {
   resetSmartPracticeState,
   setAuth,
 } from '../../services/api'
+import { getThemePreference, resolveTheme, setThemePreference, subscribeTheme } from '../../services/theme'
 
 const username = ref(getUsername() || '')
 const password = ref('')
@@ -140,6 +163,39 @@ const smartStatusDisplay = computed(() => {
   const rt = realtimeLabel.value
   return rt ? `${base} ｜ ${rt}` : base
 })
+const themeOptions = [
+  { value: 'system', label: '跟随系统', desc: '自动响应浏览器/设备主题' },
+  { value: 'light', label: '浅色', desc: '保持明亮视图' },
+  { value: 'dark', label: '深色', desc: '夜间护眼' },
+]
+const themePreference = ref(getThemePreference())
+const activeTheme = ref(resolveTheme(themePreference.value))
+const activeThemeLabel = computed(() =>
+  activeTheme.value === 'dark' ? '深色模式' : '浅色模式',
+)
+
+let stopThemeWatch
+onMounted(() => {
+  stopThemeWatch = subscribeTheme((theme, preference) => {
+    themePreference.value = preference
+    activeTheme.value = theme
+  })
+})
+
+onUnmounted(() => {
+  stopThemeWatch?.()
+})
+
+const changeTheme = (value) => {
+  const applied = setThemePreference(value)
+  themePreference.value = value
+  activeTheme.value = applied
+  const msg =
+    value === 'system'
+      ? `已跟随系统（当前${applied === 'dark' ? '深色' : '浅色'}）`
+      : `已切换到${applied === 'dark' ? '深色' : '浅色'}`
+  uni.showToast({ title: msg, icon: 'none' })
+}
 
 const handleUnified = async () => {
   if (!username.value || !password.value) {
@@ -248,6 +304,8 @@ onShow(() => {
   token.value = getToken()
   role.value = getRole() || ''
   username.value = getUsername() || ''
+  themePreference.value = getThemePreference()
+  activeTheme.value = resolveTheme(themePreference.value)
   loadSmartStatus()
 })
 </script>
@@ -434,5 +492,48 @@ onShow(() => {
 
 .arrow {
 	color: #94a3b8;
+}
+
+.theme-grid {
+	display: flex;
+	flex-direction: column;
+	gap: 10rpx;
+}
+
+.theme-tile {
+	border: 1rpx solid #e2e8f0;
+	border-radius: 14rpx;
+	padding: 14rpx;
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 8rpx;
+	background: #f8fafc;
+}
+
+.theme-tile.active {
+	border-color: #0ea5e9;
+	box-shadow: 0 6rpx 16rpx rgba(14, 165, 233, 0.18);
+}
+
+.theme-name {
+	font-size: 28rpx;
+	font-weight: 700;
+	color: #0f172a;
+}
+
+.theme-desc {
+	display: block;
+	margin-top: 4rpx;
+	font-size: 24rpx;
+	color: #64748b;
+}
+
+.theme-pill {
+	background: #0ea5e9;
+	color: #ffffff;
+	padding: 6rpx 12rpx;
+	border-radius: 999rpx;
+	font-size: 22rpx;
 }
 </style>
