@@ -31,8 +31,13 @@
           <button class="ghost mini" @click="addOption">添加选项</button>
         </view>
         <view v-if="question.type === 'choice_single'" class="options">
-          <view v-for="(opt, idx) in question.options" :key="`ans-${idx}`" class="option">
-            <radio :value="opt.key" :checked="question.standard_answer === opt.key" @change="() => setSingleAnswer(opt.key)" />
+          <view
+            v-for="(opt, idx) in question.options"
+            :key="`ans-${idx}`"
+            class="option"
+            @click="toggleSingleAnswer(opt.key)"
+          >
+            <radio :value="opt.key" :checked="question.standard_answer === opt.key" />
             <text class="opt-text">{{ opt.key }}. {{ opt.text || '未填写' }}</text>
           </view>
         </view>
@@ -139,8 +144,8 @@ const removeOption = (idx) => {
   }
 }
 
-const setSingleAnswer = (key) => {
-  question.value.standard_answer = key
+const toggleSingleAnswer = (key) => {
+  question.value.standard_answer = question.value.standard_answer === key ? '' : key
 }
 
 const isMultiChecked = (key) => {

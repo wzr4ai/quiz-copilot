@@ -156,7 +156,7 @@ TEXT_PROMPT = (
     "3) 判断题 type=choice_judgment，选项仅 A=正确、B=错误，standard_answer 填 A 或 B。\n"
     "4) 若原文选项中某个选项用 <ANS>…</ANS> 标记、含“√”、或在题干中指明答案，需正确识别。多个正确答案使用逗号分隔。\n"
     "5) 如果未明确给出答案，standard_answer 留空字符串。\n"
-    "6) 保持题干与选项文字原样（去掉多余空白即可），不要虚构内容。\n"
+    "6) 保持题干与选项文字原样（去掉多余空白等），不要虚构内容。\n"
     "示例输出：[{'type':'choice_single','content':'示例题干','options':[{'key':'A','text':'选项1'}],'standard_answer':'A','analysis':'示例解析'}]"
 )
 
