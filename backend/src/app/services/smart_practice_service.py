@@ -163,7 +163,9 @@ def _select_questions_by_ratio(
     scored: list[tuple[float, Question]] = []
     for q in remaining_pool:
         # 公式：score = U^(1/w) = U^(3^practice_count)
-        score = random.random() ** (3 ** q.practice_count)
+        #score = random.random() ** (3 ** q.practice_count)
+        # 权重 w = 1 / (1 + practice_count)
+        score = random.random() ** (1 / (1 + q.practice_count))
         scored.append((score, q))
     scored.sort(key=lambda x: x[0], reverse=True)
     picked_weighted = [q for _, q in scored[:weighted_quota]]

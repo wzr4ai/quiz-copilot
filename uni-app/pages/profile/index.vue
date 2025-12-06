@@ -68,7 +68,7 @@
 			</view>
 		</view>
 
-		<view class="card">
+		<view class="card" v-if="role === 'admin'">
 			<text class="card-title">智能刷题</text>
 			<view v-if="smartStatus">
 				<text class="hint">状态：{{ smartStatusDisplay }}</text>

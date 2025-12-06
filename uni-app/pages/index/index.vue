@@ -15,7 +15,7 @@
 					<text class="action-label">开始练习</text>
 					<text class="action-desc">随机题库</text>
 				</view>
-				<view class="action" @click="toSmart">
+				<view v-if="isAdmin" class="action" @click="toSmart">
 					<text class="action-label">智能刷题</text>
 					<text class="action-desc">题型占比+强化</text>
 				</view>
