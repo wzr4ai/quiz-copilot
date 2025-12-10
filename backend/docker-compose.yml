@@ -1,0 +1,25 @@
+services:
+  backend:
+    # 告诉 Docker：就在当前目录(.)找 Dockerfile 来构建
+    build: . 
+    
+    # 容器名字，方便你查看
+    container_name: fast-api-server
+    
+    # 端口映射：把服务器的 8000 端口接通到容器的 8000 端口
+    # 左边是服务器端口(你可以改)，右边是容器端口(不要改)
+    ports:
+      - "8000:8000"
+    
+    # 总是自动重启（比如服务器重启了，或者程序崩了，它会自动救活）
+    restart: always
+    
+    # 挂载数据（打洞）：左边是你的服务器路径，右边是容器内路径
+    volumes:
+      - ./logs:/app/logs
+      - ./done:/app/done
+      - ./Question_Bank_File:/app/Question_Bank_File
+      - ./processed_question_bank:/app/processed_question_bank
+      # 如果你的代码改动很频繁，且不想每次都重启镜像，可以把 src 也挂载进去（开发模式）
+      # 但生产环境建议不挂载 src，而是重新构建
+      # - ./src:/app/src

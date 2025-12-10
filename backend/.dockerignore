@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+
+# Python Cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual Environment (本地的venv不要拷进去)
+.venv
+venv
+env
+
+# Logs and Data (这些应该通过挂载卷映射，而不是打包进镜像)
+logs/
+done/
+processed_question_bank/
+Question_Bank_File/
+docker/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/

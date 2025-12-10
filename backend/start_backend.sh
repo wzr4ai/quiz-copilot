@@ -1,1 +1,4 @@
-uv run uvicorn main:app --log-level info --host 0.0.0.0  --port 8000 --workers 4
+#!/bin/sh
+#uv run uvicorn main:app --log-level info --host 0.0.0.0  --port 8000 --workers 4
+
+exec uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
